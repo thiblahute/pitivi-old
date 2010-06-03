@@ -524,7 +524,6 @@ class TrackObject(Signallable, Loggable):
 
     def _updatePriority(self, priority):
         if type(self) is TrackEffect:
-            #pdb.set_trace()
             if self.stream_type is VideoStream:
                 true_priority = 2 + self._stagger + (3 * priority)
             elif self.stream_type is AudioStream:
@@ -537,8 +536,7 @@ class TrackObject(Signallable, Loggable):
         if self.gnl_object.props.priority != true_priority:
             self.gnl_object.props.priority = true_priority
 
-        self.debug("Update priority: %s %s" %(self,
-                                              self.gnl_object.props.priority))
+        self.debug("New priority: %r", self.gnl_object.props.priority)
 
     priority = property(_getPriority, setPriority)
 
@@ -760,9 +758,7 @@ class Transition(Signallable):
         self._updateController()
 
     def _updatePriority(self, *unused):
-        if self.a.priority == self.b.priority and\
-                 TrackEffect not in [type(self.a), type(self.b)]: #FIXME, checkme actually
-            #pdb.set_trace()
+        if self.a.priority == self.b.priority:
             priority = self.a.priority
             self._updateOperationPriority(priority)
             self.priority = priority
@@ -819,6 +815,8 @@ class VideoTransition(Transition):
 
     def _updateOperationPriority(self, priority):
         self.operation.props.priority = 1 + 3 * priority
+        self.debug("Operation  %r priority: %r" ,self.operation,
+                                                  self.operation.props.priority)
 
     def _updateController(self):
         if self.a.stagger > self.b.stagger:
@@ -930,7 +928,7 @@ class Track(Signallable, Loggable):
 
         ret.makeBin()
         ret.gnl_object.props.priority = 2 ** 32 - 1
-
+        self.debug("Track Object %r, priority: %r:", ret, ret.gnl_object.props.priority)
         return ret
 
     def _getDefaultVideoTrackObject(self, stream):
@@ -1000,6 +998,7 @@ class Track(Signallable, Loggable):
             gnl.add(m)
             gnl.props.expandable = True
             gnl.props.priority = 0
+            self.debug("Props priority: %s", gnl.props.priority)
             return gnl
         elif isinstance(stream, VideoStream):
             gnl = gst.element_factory_make("gnloperation", "top-level-video-mixer")
@@ -1225,6 +1224,7 @@ class Track(Signallable, Loggable):
                 pop()
                 valid = False
                 safe = end
+
         return slots, valid
 
     valid_arrangement = True
