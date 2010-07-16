@@ -945,7 +945,6 @@ class TestTimelineAddFactory(TestCase):
 
     def testAudioOnly(self):
         self.source_factory.addOutputStream(self.audio_stream1)
-        self.failUnlessRaises(TimelineError, self.timeline.addSourceFactory, self.source_factory)
         self.timeline.addSourceFactory(self.source_factory)
         self.failUnlessEqual(len(self.audio_track1.track_objects), 1)
         self.failUnlessEqual(len(self.audio_track2.track_objects), 0)
