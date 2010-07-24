@@ -302,6 +302,7 @@ class TrackObject(Signallable, Loggable):
         'priority-changed': ['priority'],
         'selected-changed' : ['state'],
         'stagger-changed' : ['stagger'],
+        'active-changed' : ['active'],
     }
 
     def __init__(self, factory, stream, start=0,
@@ -452,6 +453,14 @@ class TrackObject(Signallable, Loggable):
             self.gnl_object.props.start = position
 
     start = property(_getStart, setStart)
+
+    def _getActive(self):
+        return self.gnl_object.props.active
+
+    def setActive(self, active):
+        self.gnl_object.props.active = active
+
+    active = property(_getActive, setActive)
 
     def _getDuration(self):
         return self.gnl_object.props.duration
@@ -660,6 +669,9 @@ class TrackObject(Signallable, Loggable):
             self._public_priority = public_priority
             self.emit('priority-changed', public_priority)
 
+    def _notifyActiveCb(self, obj, pspec):
+        self.emit('active-changed', obj.props.active)
+
     def _connectToSignals(self, gnl_object):
         gnl_object.connect('notify::start', self._notifyStartCb)
         gnl_object.connect('notify::duration', self._notifyDurationCb)
@@ -670,6 +682,8 @@ class TrackObject(Signallable, Loggable):
                 self._notifyMediaStopCb)
         gnl_object.connect('notify::priority',
                 self._notifyPriorityCb)
+        gnl_object.connect('notify::active',
+                self._notifyActiveCb)
 
     def _disconnectFromSignals(self):
         if self.gnl_object:
