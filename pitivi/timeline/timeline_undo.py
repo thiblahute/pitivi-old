@@ -116,13 +116,19 @@ class TimelineObjectPropertyChanged(UndoableAction):
         self.new_value = new_value
 
     def do(self):
-        setattr(self.timeline_object,
-                self.property_name.replace("-", "_"), self.new_value)
+        if self.property_name == "duration":
+            self.timeline_object.setDuration(self.new_value, False, False, False)
+        else:
+            setattr(self.timeline_object,
+                    self.property_name.replace("-", "_"), self.new_value)
         self._done()
 
     def undo(self):
-        setattr(self.timeline_object,
-                self.property_name.replace("-", "_"), self.old_value)
+        if self.property_name == "duration":
+            self.timeline_object.setDuration(self.old_value, False, False, False)
+        else:
+            setattr(self.timeline_object,
+                    self.property_name.replace("-", "_"), self.old_value)
         self._undone()
 
 
