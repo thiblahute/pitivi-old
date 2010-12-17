@@ -30,6 +30,7 @@ import pango
 import dnd
 
 from gettext import gettext as _
+from decimal import Decimal, getcontext
 
 from pitivi.log.loggable import Loggable
 from pitivi.timeline.track import TrackEffect
@@ -39,6 +40,8 @@ from pitivi.ui.gstwidget import GstElementSettingsWidget
 from pitivi.ui.effectsconfiguration import EffectsPropertiesHandling
 from pitivi.ui.common import PADDING, SPACING
 from pitivi.ui import dynamic
+
+getcontext().prec = 2
 
 (COL_ACTIVATED,
  COL_TYPE,
@@ -65,7 +68,7 @@ class ClipProperties(gtk.VBox, Loggable):
         self.info_bar_box = gtk.VBox()
         self.set_homogeneous(False)
 
-        self.speed_expander = SpeedProperties(self, instance)
+        self.speed_expander = SpeedProperties(instance, instance.action_log)
 
         self.effect_properties_handling = EffectsPropertiesHandling(instance.action_log)
         self.effect_expander = EffectProperties(instance,
@@ -445,31 +448,42 @@ class SpeedProperties(gtk.Expander):
     __signals__ = {
         'selection-changed': []
     }
-    def __init__(self, instance, app):
+    def __init__(self, app, action_log):
         gtk.Expander.__init__(self)
+        self.action_log = action_log
         self.app = app
         self._timeline = None
         self._expanding = False
+        self._current_tl_obj = None
 
         self._hbox = gtk.HBox()
-        adjust = gtk.Adjustment(1., 0.001, 100., 0.01, 0.1)
+        adjust = gtk.Adjustment(1., 0.01, 100., 0.1, 0.1)
         self.spin = gtk.SpinButton(adjust, digits = 2)
         self._hbox.pack_end(self.spin, expand=True, fill=True)
         self._hbox.pack_start(gtk.Label(_("Clip Speed: ")), expand=False, fill=False)
         self.add(self._hbox)
-        self.instance = instance
         self.set_label(_("Speed configuration"))
         self.set_sensitive(False)
         self.show_all()
 
-        self.spin.connect('value-changed', self._slowitdownCb)
+        self.spin.connect('value-changed', self._speedChangedCb)
+        self.spin.connect('focus-in-event', self._focusInCb)
+        self.spin.connect('focus-out-event', self._focusOutCb)
         self.connect('notify::expanded', self._expandedCb)
 
-    def _slowitdownCb(self, spinbutton):
-        self.app.gui.timeline.timeline.speedchanged = True
-        for tl_object in self.app.gui.timeline.timeline.selection.selected:
-            tl_object.setDuration(tl_object.media_duration // spinbutton.get_value(),
-                                  set_media_stop = False, check_in_point = False)
+    def _focusInCb(self, unused_spinbutton, unused):
+        self.app.gui.setActionsSensitive(['DeleteObj'], False)
+
+    def _focusOutCb(self, unused_spinbutton, unused):
+        self.app.gui.setActionsSensitive(['DeleteObj'], True)
+
+    def _speedChangedCb(self, spinbutton):
+        if self._current_tl_obj:
+            self.action_log.begin("Clip speed change")
+            self._current_tl_obj.setDuration(self._current_tl_obj.media_duration //
+                                 spinbutton.get_value(), set_media_stop = False,
+                                 check_in_point = False)
+            self.action_log.commit()
 
     def _expandedCb(self, expander, params):
         self.set_expanded(self.get_expanded())
@@ -478,11 +492,29 @@ class SpeedProperties(gtk.Expander):
     def _selectionChangedCb(self, timeline):
         self._updateAll()
 
+    def _tlObjectDurationChangedCb(self, unused_timeline, unused_duration):
+        self._updateAll()
+
     def _updateAll(self):
-        if self.timeline and self.timeline.selection.selected:
+        if self.timeline and len(self.timeline.selection.selected) == 1:
+            for tl_obj in self.timeline.selection.selected:
+                pass
+
+            if tl_obj != self._current_tl_obj:
+                tl_obj.connect("duration-changed",
+                               self._tlObjectDurationChangedCb)
+                self._current_tl_obj = tl_obj
+
+            rate = Decimal(tl_obj.media_duration) / Decimal(tl_obj.duration)
+            self.spin.set_value(rate)
             self.set_sensitive(True)
         else:
+            if self._current_tl_obj:
+                self._current_tl_obj.disconnect_by_func(
+                                    self._tlObjectDurationChangedCb)
+                self._current_tl_obj = None
             self.set_sensitive(False)
+            self.spin.set_value(1.00)
 
     def _getTimeline(self):
         return self._timeline
