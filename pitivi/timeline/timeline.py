@@ -235,6 +235,14 @@ class TimelineObject(Signallable, Loggable):
 
         return self.track_objects[0].media_duration
 
+    def _getRate(self):
+        """
+            Returns the rate speed of the object.
+        """
+        return self.track_objects[0].rate
+
+    rate = property(_getRate)
+
     # FIXME: 'snaps' is a bogus argument here !
     def setMediaDuration(self, position, snap=False):
         """

@@ -505,8 +505,7 @@ class SpeedProperties(gtk.Expander):
                                self._tlObjectDurationChangedCb)
                 self._current_tl_obj = tl_obj
 
-            rate = Decimal(tl_obj.media_duration) / Decimal(tl_obj.duration)
-            self.spin.set_value(rate)
+            self.spin.set_value(tl_obj.rate)
             self.set_sensitive(True)
         else:
             if self._current_tl_obj:
