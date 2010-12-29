@@ -175,6 +175,7 @@ class TestTrackObject(TestCase):
         obj.start = 2 * gst.SECOND
         obj.in_point = 1 * gst.SECOND
         obj.duration = 10 * gst.SECOND
+        obj.media_duration = 10 * gst.SECOND
 
         self.failUnlessEqual(self.monitor.duration_changed_count, 1)
 
@@ -242,6 +243,7 @@ class TestTrackObject(TestCase):
         obj.start = 10 * gst.SECOND
         obj.in_point = 11 * gst.SECOND
         obj.duration = 15 * gst.SECOND
+        obj.media_duration = 15 * gst.SECOND
 
         # this should be possible
         monitor = TrackSignalMonitor(obj)
