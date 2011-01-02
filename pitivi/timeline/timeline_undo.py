@@ -142,6 +142,10 @@ class TimelineObjectAdded(UndoableAction):
     def do(self):
         for track_object, track in self.tracks.iteritems():
             track.addTrackObject(track_object)
+            stop = track_object.in_point + track_object.duration
+            for p, i in track_object.interpolators.itervalues():
+                i.updateMediaStart(track_object.in_point)
+                i.updateMediaStop(stop)
 
         self.timeline.addTimelineObject(self.timeline_object)
         self._done()
