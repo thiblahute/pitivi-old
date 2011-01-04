@@ -163,7 +163,7 @@ class TimelineObject(Signallable, Loggable):
 
         return self.track_objects[0].duration
 
-    def setDuration(self, duration, snap=False, set_media_stop=True):
+    def setDuration(self, duration, snap=False, set_media_stop=True, check_in_point=True):
         """
         Sets the duration of the object.
 
@@ -189,8 +189,9 @@ class TimelineObject(Signallable, Loggable):
             position = self.timeline.snapToEdge(position)
             duration = position - self.start
 
-        duration = min(duration, self.factory.duration -
-                self.track_objects[0].in_point)
+        if check_in_point:
+            duration = min(duration, self.factory.duration -
+                    self.track_objects[0].in_point)
 
         for track_object in self.track_objects:
             track_object.setObjectDuration(duration)
@@ -287,7 +288,6 @@ class TimelineObject(Signallable, Loggable):
         @type state: L{bool}
         """
         self._selected = state
-
         for obj in self.track_objects:
             obj.setObjectSelected(state)
 
