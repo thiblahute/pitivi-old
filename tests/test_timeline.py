@@ -263,6 +263,49 @@ class TestTimelineObjectProperties(TestCase):
         self.failUnlessEqual(monitor.start_changed_count, 0)
         self.failUnlessEqual(monitor.duration_changed_count, 1)
 
+    def testSplitWithSpeedChange(self):
+        obj = self.timeline_object
+        track_object = self.track_object1
+        obj.addTrackObject(track_object)
+
+        obj.start = 3 * gst.SECOND
+        obj.duration = 5 * gst.SECOND
+        obj.media_duration = 10 * gst.SECOND
+
+        monitor = TimelineSignalMonitor(obj)
+        self.failUnlessEqual(obj.rate, 2.0)
+
+        # split at 4s should result in:
+        # obj (start 3, end 4, duration 1, media_duration 2)
+        # other1 (start 4, end 8, media_duration 8)
+        other1 = obj.split(4 * gst.SECOND)
+
+        self.failUnlessEqual(obj.start, 3 * gst.SECOND)
+        self.failUnlessEqual(obj.duration, 1 * gst.SECOND)
+        self.failUnlessEqual(obj.media_duration, 2 * gst.SECOND)
+
+        self.failUnlessEqual(other1.start, 4 * gst.SECOND)
+        self.failUnlessEqual(other1.duration, 4 * gst.SECOND)
+        self.failUnlessEqual(other1.media_duration, 8 * gst.SECOND)
+
+        self.failUnlessEqual(monitor.start_changed_count, 0)
+        self.failUnlessEqual(monitor.duration_changed_count, 1)
+
+        # split again other1
+        monitor = TimelineSignalMonitor(other1)
+
+        other2 = other1.split(6 * gst.SECOND)
+        self.failUnlessEqual(other1.start, 4 * gst.SECOND)
+        self.failUnlessEqual(other1.duration, 2 * gst.SECOND)
+        self.failUnlessEqual(other1.media_duration, 4 * gst.SECOND)
+
+        self.failUnlessEqual(other2.start, 6 * gst.SECOND)
+        self.failUnlessEqual(other2.duration, 2 * gst.SECOND)
+        self.failUnlessEqual(other2.media_duration, 4 * gst.SECOND)
+
+        self.failUnlessEqual(monitor.start_changed_count, 0)
+        self.failUnlessEqual(monitor.duration_changed_count, 1)
+
 class TestTimelineAddRemoveTracks(TestCase):
     def testAddRemoveTracks(self):
         stream = AudioStream(gst.Caps('audio/x-raw-int'))
