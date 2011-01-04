@@ -36,7 +36,6 @@ from decimal import Decimal, getcontext
 getcontext().prec = 6
 
 
-
 class TrackError(Exception):
     pass
 
@@ -177,7 +176,7 @@ class Interpolator(Signallable, Loggable):
         if trackobject.in_point == trackobject.out_point:
             self.end.setObjectTime(trackobject.in_point + 1)
         else:
-            self.end.setObjectTime(trackobject.out_point)
+            self.end.setObjectTime(trackobject.in_point + trackobject.duration)
         self._keyframeTimeValueChanged(self.end, self.end.time, self.end.value)
         self.format = format if format else str
         self.connectTrackObject()
@@ -356,7 +355,6 @@ class TrackObject(Signallable, Loggable):
         self._public_priority = priority
         self._position = 0
         self._stagger = 0
-        self.speed = 1.
         self.gnl_object = obj = self._makeGnlObject()
         self.keyframes = []
 
@@ -606,7 +604,7 @@ class TrackObject(Signallable, Loggable):
 
         delta = position - self.start
         in_point = self.in_point
-        in_point += delta
+        in_point = int((in_point + delta) * self.rate)
 
         return in_point, position
 
@@ -614,10 +612,14 @@ class TrackObject(Signallable, Loggable):
         in_point, position = self._getTrimInpointAndPosition(position)
         new_duration = max(0, self.start + self.duration - position)
 
+        new_duration = max(0,
+                (self.start + (self.media_duration // self.rate) - position))
+        mduration = new_duration * self.rate
+
         self.setObjectStart(position)
-        self.setObjectDuration(new_duration)
+        self.setObjectMediaDuration(mduration)
         self.setObjectInPoint(in_point)
-        self.setObjectMediaDuration(new_duration)
+        self.setObjectDuration(new_duration)
 
     def split(self, position, snap=False):
         if self.timeline_object is not None:
@@ -629,6 +631,7 @@ class TrackObject(Signallable, Loggable):
         start = self.gnl_object.props.start
         duration = self.gnl_object.props.duration
         in_point = self.gnl_object.props.media_start
+        rate = self.rate
         if position <= start or position >= start + duration:
             raise TrackError("can't split at position %s" % gst.TIME_ARGS(position))
 
@@ -650,6 +653,8 @@ class TrackObject(Signallable, Loggable):
             for kf in duplicates:
                 i.removeKeyframe(kf)
 
+        other.trimObjectStart(position)
+
         for prop, i in other.interpolators.itervalues():
             value = i.valueAt(position)
             i.start.setValue(value)
@@ -661,13 +666,16 @@ class TrackObject(Signallable, Loggable):
             for kf in duplicates:
                 i.removeKeyframe(kf)
 
-        other.trimObjectStart(position)
-        self.setObjectDuration(position - self.gnl_object.props.start)
-        self.setObjectMediaDuration(position - self.gnl_object.props.start)
+        duration = (position - self.start)
+        mduration = duration * rate
+        self.setObjectMediaDuration(mduration)
+        self.setObjectDuration(duration)
+
         for prop, i in other.interpolators.itervalues():
             i.connectTrackObject()
         for prop, i in self.interpolators.itervalues():
             i.connectTrackObject()
+
         return other
 
     # True when the track object is part of the timeline's current selection
@@ -703,10 +711,14 @@ class TrackObject(Signallable, Loggable):
         self._rebuild_interpolators = True
 
     def _notifyStartCb(self, obj, pspec):
+        start = obj.props.start
         self.emit('start-changed', obj.props.start)
 
     def _notifyDurationCb(self, obj, pspec):
+        stop = self.in_point + obj.props.duration
         self.emit('duration-changed', obj.props.duration)
+        for p, i in self.interpolators.itervalues():
+            i.updateMediaStop(stop)
 
     def _notifyMediaStartCb(self, obj, pspec):
         start = obj.props.media_start
@@ -720,8 +732,6 @@ class TrackObject(Signallable, Loggable):
     def _notifyMediaStopCb(self, obj, pspec):
         stop = obj.props.media_stop
         self.emit('out-point-changed', stop)
-        for p, i in self.interpolators.itervalues():
-            i.updateMediaStop(stop)
 
     def _notifyPriorityCb(self, obj, pspec):
         if self.stream_type is VideoStream:
