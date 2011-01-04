@@ -62,6 +62,9 @@ class ClipProperties(gtk.VBox, Loggable):
         self.settings = instance.settings
         self._project = None
         self.info_bar_box = gtk.VBox()
+        self.set_homogeneous(False)
+
+        self.speed_expander = SpeedProperties(self, instance)
 
         self.effect_properties_handling = EffectsPropertiesHandling(instance.action_log)
         self.effect_expander = EffectProperties(instance,
@@ -69,16 +72,20 @@ class ClipProperties(gtk.VBox, Loggable):
                                                 self)
 
         self.pack_start(self.info_bar_box, expand=False, fill=True)
-        self.pack_end(self.effect_expander, expand=True, fill=True)
+        self.pack_start(self.speed_expander, expand=False, fill=False)
+        self.pack_start(self.effect_expander, expand=True, fill=True)
+        self.set_spacing(SPACING)
 
         self.info_bar_box.show()
         self.effect_expander.show()
+        self.speed_expander.show()
         self.show()
 
     def _setProject(self, project):
         self._project = project
         if project:
             self.effect_expander._connectTimelineSelection(self._project.timeline)
+            self.speed_expander.timeline = self._project.timeline
 
     def _getProject(self):
         return self._project
@@ -101,16 +108,14 @@ class ClipProperties(gtk.VBox, Loggable):
         return label, info_bar
 
 
-class EffectProperties(gtk.HBox):
+class EffectProperties(gtk.Expander, gtk.HBox):
     """
     Widget for viewing and configuring effects
     """
-    # Note: This should be inherited from gtk.Expander when we get other things
-    # to put in ClipProperties, that is why this is done this way
 
     def __init__(self, instance, effect_properties_handling, clip_properties):
+        gtk.Expander.__init__(self)
         gtk.HBox.__init__(self)
-        #self.set_expanded(True)
 
         self.selected_effects = []
         self.timeline_objects = []
@@ -173,7 +178,7 @@ class EffectProperties(gtk.HBox):
         typecell = gtk.CellRendererText()
         typecell.props.xpad = PADDING
         typecell.set_property("ellipsize", pango.ELLIPSIZE_END)
-        typecol.pack_start(typecell)
+        typecol.pack_start(typecell, expand = True)
         typecol.add_attribute(typecell, "text", COL_TYPE)
 
         namecol = gtk.TreeViewColumn(_("Effect name"))
@@ -183,7 +188,7 @@ class EffectProperties(gtk.HBox):
         namecell = gtk.CellRendererText()
         namecell.props.xpad = PADDING
         namecell.set_property("ellipsize", pango.ELLIPSIZE_END)
-        namecol.pack_start(namecell)
+        namecol.pack_start(namecell, expand = True)
         namecol.add_attribute(namecell, "text", COL_NAME_TEXT)
 
         self.treeview.drag_dest_set(gtk.DEST_DEFAULT_MOTION,
@@ -191,7 +196,6 @@ class EffectProperties(gtk.HBox):
             gtk.gdk.ACTION_COPY)
 
         self.selection = self.treeview.get_selection()
-
         self.selection.connect("changed", self._treeviewSelectionChangedCb)
         self._removeEffectBt.connect("clicked", self._removeEffectClicked)
 
@@ -205,13 +209,15 @@ class EffectProperties(gtk.HBox):
         self.app.connect("new-project-loaded",
             self._newProjectLoadedCb)
 
-        #self.connect('notify::expanded', self._expandedCb)
+        self.connect('notify::expanded', self._expandedCb)
 
         self._table.attach(self.treeview_scrollwin, 0, 1, 2, 3)
 
         self._vcontent.pack1(self._table, resize=True, shrink=False)
         self._showInfoBar()
         self._vcontent.show()
+        self.set_expanded(True)
+        self.set_label("Effects configuration")
 
     def _newProjectLoadedCb(self, app, project):
         self.clip_properties.project = project
@@ -247,6 +253,7 @@ class EffectProperties(gtk.HBox):
                 timeline_object.connect("track-object-removed", self._trackRemovedRemovedCb)
         else:
             self.timeline_objects = []
+            self.set_sensitive(False)
         self._updateAll()
 
     def  _trackObjectAddedCb(self, unused_timeline_object, track_object):
@@ -320,8 +327,8 @@ class EffectProperties(gtk.HBox):
         track_effect.active = not track_effect.active
         self.app.action_log.commit()
 
-    #def _expandedCb(self, expander, params):
-    #    self._updateAll()
+    def _expandedCb(self, expander, params):
+        self._updateAll()
 
     def _treeViewQueryTooltipCb(self, treeview, x, y, keyboard_mode, tooltip):
         context = treeview.get_tooltip_context(x, y, keyboard_mode)
@@ -335,19 +342,19 @@ class EffectProperties(gtk.HBox):
         return True
 
     def _updateAll(self):
-        #if self.get_expanded():
-        self._removeEffectBt.set_sensitive(False)
-        if len(self.timeline_objects) == 1:
-            self._setEffectDragable()
-            self._updateTreeview()
-            self._updateEffectConfigUi()
+        if self.get_expanded():
+            self._removeEffectBt.set_sensitive(False)
+            if len(self.timeline_objects) == 1:
+                self._setEffectDragable()
+                self._updateTreeview()
+                self._updateEffectConfigUi()
+            else:
+                self._hideEffectConfig()
+                self.storemodel.clear()
+                self._showInfoBar()
+            self._vcontent.show()
         else:
-            self._hideEffectConfig()
-            self.storemodel.clear()
-            self._showInfoBar()
-        self._vcontent.show()
-        #else:
-        #    self._vcontent.hide()
+            self._vcontent.hide()
 
     def _activeChangedCb(self, unusedObj, unusedActive):
         self._updateTreeview()
@@ -379,11 +386,11 @@ class EffectProperties(gtk.HBox):
         self.txtlabel.show()
         self._info_bar.show()
 
-        self.treeview.set_sensitive(False)
+        self.set_sensitive(False)
         self._table.show_all()
 
     def _setEffectDragable(self):
-        self.treeview.set_sensitive(True)
+        self.set_sensitive(True)
         self._table.show_all()
         self._info_bar.hide_all()
 
@@ -430,3 +437,59 @@ class EffectProperties(gtk.HBox):
         if self._effect_config_ui:
             self._effect_config_ui.hide()
             self._effect_config_ui = None
+
+class SpeedProperties(gtk.Expander):
+    """
+    Widget for viewing and configuring speed
+    """
+    __signals__ = {
+        'selection-changed': []
+    }
+    def __init__(self, instance, app):
+        gtk.Expander.__init__(self)
+        self.app = app
+        self._timeline = None
+        self._expanding = False
+
+        self._hbox = gtk.HBox()
+        adjust = gtk.Adjustment(1., 0.001, 100., 0.01, 0.1)
+        self.spin = gtk.SpinButton(adjust, digits = 2)
+        self._hbox.pack_end(self.spin, expand=True, fill=True)
+        self._hbox.pack_start(gtk.Label(_("Clip Speed: ")), expand=False, fill=False)
+        self.add(self._hbox)
+        self.instance = instance
+        self.set_label(_("Speed configuration"))
+        self.set_sensitive(False)
+        self.show_all()
+
+        self.spin.connect('value-changed', self._slowitdownCb)
+        self.connect('notify::expanded', self._expandedCb)
+
+    def _slowitdownCb(self, spinbutton):
+        self.app.gui.timeline.timeline.speedchanged = True
+        for tl_object in self.app.gui.timeline.timeline.selection.selected:
+            tl_object.setDuration(tl_object.media_duration // spinbutton.get_value(),
+                                  set_media_stop = False, check_in_point = False)
+
+    def _expandedCb(self, expander, params):
+        self.set_expanded(self.get_expanded())
+        self._updateAll()
+
+    def _selectionChangedCb(self, timeline):
+        self._updateAll()
+
+    def _updateAll(self):
+        if self.timeline and self.timeline.selection.selected:
+            self.set_sensitive(True)
+        else:
+            self.set_sensitive(False)
+
+    def _getTimeline(self):
+        return self._timeline
+
+    def _setTimeline(self, timeline):
+        self._timeline = timeline
+        if timeline:
+            self.timeline.connect('selection-changed', self._selectionChangedCb)
+
+    timeline = property(_getTimeline, _setTimeline)

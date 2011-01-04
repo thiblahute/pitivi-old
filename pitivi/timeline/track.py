@@ -31,6 +31,10 @@ from pitivi.factories.test import VideoTestSourceFactory, \
         AudioTestSourceFactory
 from pitivi.elements.mixer import SmartAdderBin, SmartVideomixerBin
 from pitivi.timeline.gap import Gap
+from decimal import Decimal, getcontext
+
+getcontext().prec = 6
+
 
 
 class TrackError(Exception):
@@ -147,6 +151,7 @@ class Interpolator(Signallable, Loggable):
         self.debug("track:%r, element:%r, property:%r", trackobject, element, prop)
         self._keyframes = []
         self.trackobject = trackobject
+        self.track_obj_duration = trackobject.duration
 
         if minimum is None:
             minimum = prop.minimum
@@ -175,6 +180,23 @@ class Interpolator(Signallable, Loggable):
             self.end.setObjectTime(trackobject.out_point)
         self._keyframeTimeValueChanged(self.end, self.end.time, self.end.value)
         self.format = format if format else str
+        self.connectTrackObject()
+
+    def _trackObjectDurationChangedCb(self, unused_track_obj, duration):
+        if duration != self.track_obj_duration and\
+                            not self.track_obj_duration == 0:
+            factor = Decimal(duration) / Decimal(self.track_obj_duration)
+            for kf in self._keyframes:
+                self.setKeyframeTime(kf, long(kf.time * factor))
+
+        self.end.setObjectTime(self.start.time + duration)
+        self.track_obj_duration = duration
+
+    def connectTrackObject(self):
+        self.trackobject.connect("duration-changed", self._trackObjectDurationChangedCb)
+
+    def disconnectTrackObject(self):
+        self.trackobject.disconnect_by_func(self._trackObjectDurationChangedCb)
 
     def attachToElementProperty(self, prop, element):
         self._element = element
@@ -334,6 +356,7 @@ class TrackObject(Signallable, Loggable):
         self._public_priority = priority
         self._position = 0
         self._stagger = 0
+        self.speed = 1.
         self.gnl_object = obj = self._makeGnlObject()
         self.keyframes = []
 
@@ -610,6 +633,10 @@ class TrackObject(Signallable, Loggable):
             raise TrackError("can't split at position %s" % gst.TIME_ARGS(position))
 
         other = self.copy()
+        for prop, i in other.interpolators.itervalues():
+            i.disconnectTrackObject()
+        for prop, i in self.interpolators.itervalues():
+            i.disconnectTrackObject()
 
         # update interpolators
         for prop, i in self.interpolators.itervalues():
@@ -637,6 +664,10 @@ class TrackObject(Signallable, Loggable):
         other.trimObjectStart(position)
         self.setObjectDuration(position - self.gnl_object.props.start)
         self.setObjectMediaDuration(position - self.gnl_object.props.start)
+        for prop, i in other.interpolators.itervalues():
+            i.connectTrackObject()
+        for prop, i in self.interpolators.itervalues():
+            i.connectTrackObject()
         return other
 
     # True when the track object is part of the timeline's current selection
