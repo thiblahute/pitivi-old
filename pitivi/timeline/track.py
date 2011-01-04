@@ -620,6 +620,9 @@ class TrackObject(Signallable, Loggable):
         self.setObjectMediaDuration(mduration)
         self.setObjectInPoint(in_point)
         self.setObjectDuration(new_duration)
+        self.debug("Position: %s, duration: %s, media-duration %s",
+                   gst.TIME_ARGS(position), gst.TIME_ARGS(new_duration),
+                   gst.TIME_ARGS(mduration))
 
     def split(self, position, snap=False):
         if self.timeline_object is not None:
@@ -670,6 +673,9 @@ class TrackObject(Signallable, Loggable):
         mduration = duration * rate
         self.setObjectMediaDuration(mduration)
         self.setObjectDuration(duration)
+        self.debug("Duration: %s, media-duration %s",
+                   gst.TIME_ARGS(duration),
+                   gst.TIME_ARGS(mduration))
 
         for prop, i in other.interpolators.itervalues():
             i.connectTrackObject()
