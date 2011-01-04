@@ -205,6 +205,7 @@ class RandomAccessPreviewer(Previewer):
     def render_cairo(self, cr, bounds, element, hscroll_pos, y1):
         if not self._view:
             return
+        twidth = self.twidth // element.rate
         # The idea is to conceptually divide the clip into a sequence of
         # rectangles beginning at the start of the file, and
         # pixelsToNs(twidth) nanoseconds long. The thumbnail within the
@@ -237,7 +238,7 @@ class RandomAccessPreviewer(Previewer):
         #    <=>     delta = x1 - sof (mod twidth).
         # Fortunately for us, % works on floats in python.
 
-        i = x1 - ((x1 - sof) % (self.twidth + self._spacing()))
+        i = x1 - ((x1 - sof) % (twidth + self._spacing()))
 
         # j = timestamp *within the element* of thumbnail to be drawn. we want
         # timestamps to be numerically stable, but in practice this seems to
@@ -245,12 +246,12 @@ class RandomAccessPreviewer(Previewer):
         # further, which would result in fewer thumbnails needing to be
         # generated.
         j = Zoomable.pixelToNs(i - sof)
-        istep = self.twidth + self._spacing()
+        istep = twidth + self._spacing()
         jstep = self.tdur + Zoomable.pixelToNs(self.spacing)
 
         while i < bounds.x2:
             self._thumbForTime(cr, j, i, y1)
-            cr.rectangle(i - 1, y1, self.twidth + 2, self.theight)
+            cr.rectangle(i - 1, y1, twidth + 2, self.theight)
             i += istep
             j += jstep
             cr.fill()

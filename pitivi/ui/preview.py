@@ -70,6 +70,7 @@ class Preview(goocanvas.ItemSimple, goocanvas.Item, Zoomable):
 
     @handler(element, "in-point-changed")
     @handler(element, "media-duration-changed")
+    @handler(element, "duration-changed")
     def _media_props_changed(self, obj, unused_start_duration):
         self.changed(True)
 
