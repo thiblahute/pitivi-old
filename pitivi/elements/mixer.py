@@ -210,21 +210,32 @@ class SmartVideomixerBin(gst.Bin):
 
         csp = gst.element_factory_make("ffmpegcolorspace", "csp-%d" % self.pad_count)
         capsfilter = gst.element_factory_make("capsfilter", "capsfilter-%d" % self.pad_count)
+
+        # Info: we make the videomixer element believe the stream speedrate is always at 1.
+        # We use this workaround because setting the speerate of the video was screwed 
+        # because of:
+        #       From videomixer.c: /* FIXME, use rate/applied_rate as set on all sinkpads.*/
+        # 
+        # FIXME remove this identity element when not needed anymore (using videomixer2)
+        rate_converter = gst.element_factory_make("identity", "identity-%d" %self.pad_count)
+        rate_converter.props.single_segment =  True
+
         # configure the capsfilter caps
         if self.alpha_helper.alpha_count != 0:
             capsfilter.props.caps = gst.Caps('video/x-raw-yuv,format=(fourcc)AYUV')
         else:
             capsfilter.props.caps = gst.Caps('video/x-raw-yuv')
 
-        self.add(csp, capsfilter)
+        self.add(rate_converter, csp, capsfilter)
 
         csp.link_pads_full("src", capsfilter, "sink", gst.PAD_LINK_CHECK_NOTHING)
+        capsfilter.link_pads_full("src", rate_converter, "sink", gst.PAD_LINK_CHECK_NOTHING)
         csp.sync_state_with_parent()
         capsfilter.sync_state_with_parent()
 
         videomixerpad = self.videomixer.get_request_pad("sink_%d" % self.pad_count)
 
-        capsfilter.get_pad("src").link_full(videomixerpad, gst.PAD_LINK_CHECK_NOTHING)
+        rate_converter.get_pad("src").link_full(videomixerpad, gst.PAD_LINK_CHECK_NOTHING)
 
         pad = gst.GhostPad(name, csp.get_pad("sink"))
         pad.set_active(True)
