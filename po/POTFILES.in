@@ -20,7 +20,6 @@ pitivi/project.py
 pitivi/settings.py
 pitivi/ui/basetabs.py
 pitivi/ui/clipproperties.py
-pitivi/ui/common.py
 pitivi/ui/dynamic.py
 pitivi/ui/effectlist.py
 pitivi/ui/effectsconfiguration.py
@@ -39,3 +38,4 @@ pitivi/ui/timeline.py
 pitivi/ui/trackobject.py
 pitivi/ui/viewer.py
 pitivi/utils/misc.py
+pitivi/utils/ui.py
