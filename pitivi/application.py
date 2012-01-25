@@ -35,6 +35,7 @@ from gettext import gettext as _
 from optparse import OptionParser
 
 import pitivi.instance as instance
+import pitivi.utils.loggable as log
 
 from pitivi.check import initial_checks
 from pitivi.effects import EffectsHandler
@@ -50,9 +51,8 @@ from pitivi.dialogs.startupwizard import StartUpWizard
 from pitivi.utils.signal import Signallable
 from pitivi.utils.system import getSystem
 from pitivi.utils.loggable import Loggable
-import pitivi.utils.loggable as log
+from pitivi.undo.timeline import TimelineLogObserver
 #FIXME GES port disabled it
-#from pitivi.undo.timeline import TimelineLogObserver
 
 # FIXME : Speedup loading time
 # Currently we load everything in one go
@@ -135,7 +135,7 @@ class Pitivi(Loggable, Signallable):
         self.debug_action_log_observer = DebugActionLogObserver()
         self.debug_action_log_observer.startObserving(self.action_log)
         # TODO reimplement the observing after GES port
-        #self.timelineLogObserver = TimelineLogObserver(self.action_log)
+        self.timelineLogObserver = TimelineLogObserver(self.action_log)
         self.projectLogObserver = ProjectLogObserver(self.action_log)
         self.medialibrary_log_observer = MediaLibraryLogObserver(self.action_log)
 
@@ -186,7 +186,7 @@ class Pitivi(Loggable, Signallable):
     def _projectManagerNewProjectLoaded(self, projectManager, project):
         self.current = project
         self.action_log.clean()
-        #self.timelineLogObserver.startObserving(project.timeline)
+        self.timelineLogObserver.startObserving(project.timeline)
         self.projectLogObserver.startObserving(project)
         self.medialibrary_log_observer.startObserving(project.medialibrary)
         self._newProjectLoaded(project)

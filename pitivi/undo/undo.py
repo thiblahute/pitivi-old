@@ -22,6 +22,7 @@
 """
 Base classes for the undo/redo feature implementation
 """
+import gobject
 
 from pitivi.utils.signal import Signallable
 from pitivi.utils.loggable import Loggable
@@ -293,9 +294,10 @@ class PropertyChangeTracker(Signallable):
 
     def _takeCurrentSnapshot(self, obj):
         properties = {}
-        for property_name in self.property_names:
-            properties[property_name] = \
-                    obj.get_property(property_name.replace("-", "_"))
+        obj_props = [prop.name for prop in gobject.list_properties(self.obj)]
+        props = [prop for prop in self.property_names if prop in obj_props]
+        for prop_name in props:
+            properties[prop_name] = obj.get_property(prop_name)
 
         return properties
 
