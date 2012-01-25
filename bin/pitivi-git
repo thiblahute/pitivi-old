@@ -19,7 +19,7 @@
 #  + an empty location where you have R+W access, so the script sets up
 #    everything for you.  (better choice in the case you are starting
 #    with PiTiVi devel)
-MYPITIVI=$HOME/pitivi-git
+MYPITIVI=$HOME/git_repos/pitivi-git
 
 #
 # Everything below this line shouldn't be edited!
