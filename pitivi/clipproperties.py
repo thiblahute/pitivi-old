@@ -349,8 +349,8 @@ class EffectProperties(gtk.Expander, gtk.HBox):
                     #Actually add the effect
                     self.app.action_log.begin("add effect")
                     effect = ges.TrackParseLaunchEffect(bin_desc)
-                    tlobj.add_track_object(effect)
                     track.add_object(effect)
+                    tlobj.add_track_object(effect)
                     self._updateAll()
                     self.app.action_log.commit()
                     self._seeker.flush()

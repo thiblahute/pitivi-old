@@ -257,6 +257,7 @@ class TimelineLogObserver(object):
 
     def _connectToTimelineObject(self, timeline_object):
         tracker = TimelineObjectPropertyChangeTracker()
+        tracker.connectToObject(timeline_object)
         for property_name in tracker.property_names:
             tracker.connect("notify::" + property_name,
                     self._timelineObjectPropertyChangedCb, property_name)
@@ -264,8 +265,8 @@ class TimelineLogObserver(object):
 
         timeline_object.connect("track-object-added", self._timelineObjectTrackObjectAddedCb)
         timeline_object.connect("track-object-removed", self._timelineObjectTrackObjectRemovedCb)
-        track_object.connect("effect-added", self._effectAddedCb)
-        track_object.connect("effect-removed", self._effectRemovedCb)
+        timeline_object.connect("effect-added", self._effectAddedCb)
+        timeline_object.connect("effect-removed", self._effectRemovedCb)
         for obj in timeline_object.get_track_objects():
             self._connectToTrackObject(obj)
 
@@ -278,7 +279,7 @@ class TimelineLogObserver(object):
         #for prop, interpolator in track_object.getInterpolators().itervalues():
             #self._connectToInterpolator(interpolator)
         if isinstance(track_object, ges.TrackEffect):
-            self.effect_properties_tracker.addEffectElement(track_object.getElement())
+            self.effect_properties_tracker.addEffect(track_object)
 
     def _disconnectFromTrackObject(self, track_object):
         for prop, interpolator in track_object.getInterpolators().itervalues():
@@ -299,17 +300,15 @@ class TimelineLogObserver(object):
         tracker.disconnectFromObject(interpolator)
         tracker.disconnect_by_func(self._interpolatorKeyframeMovedCb)
 
-    def _effectAddedCb(self, timeline, track_object):
-        action = self.trackEffectAddAction(timeline_object, track_object,
-                                               self.effect_properties_tracker)
+    def _effectAddedCb(self, tlobj, track_object):
+        action = self.trackEffectAddAction(tlobj, track_object,
+             self.effect_properties_tracker)
         #We use the action instead of the track object
         #because the track_object changes when redoing
-        track_object.connect("effect-added",
+        track_object.connect("notify::active",
                     self._trackObjectActiveChangedCb, action)
         self.log.push(action)
-        element = track_object.getElement()
-        if element:
-            self.effect_properties_tracker.addEffectElement(element)
+        self.effect_properties_tracker.addEffect(track_object)
 
     def _effectRemovedCb(self, timeline, track_object):
         track_object.disconnect_by_func(self._effectAddedCb)
@@ -354,9 +353,7 @@ class TimelineLogObserver(object):
             track_object.connect("active-changed",
                                  self._trackObjectActiveChangedCb, action)
             self.log.push(action)
-            element = track_object.getElement()
-            if element:
-                self.effect_properties_tracker.addEffectElement(element)
+            self.effect_properties_tracker.addEffect(track_object)
         else:
             self._connectToTrackObject(track_object)
 

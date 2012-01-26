@@ -56,19 +56,10 @@ class EffectGstElementPropertyChangeTracker:
         self.action_log = action_log
         self.pipeline = None
 
-    def addEffectElement(self, gst_element):
-        properties = {}
-
-        if gst_element in self._tracked_effects:
-            return
-
-        for prop in gobject.list_properties(gst_element):
-            gst_element.connect('notify::' + prop.name,
-                                self._propertyChangedCb,
-                                gst_element)
-            if prop.flags & gobject.PARAM_READABLE:
-                properties[prop.name] = gst_element.get_property(prop.name)
-        self._tracked_effects[gst_element] = properties
+    def addEffect(self, tckobj):
+        tckobj.connect('deep-notify', self._propertyChangedCb)
+        self._tracked_effects[tckobj] = [prop.name for prop in \
+                tckobj.list_children_properties()]
 
     def getPropChangedFromTrackObj(self, track_effect):
         prop_changed = []
@@ -89,12 +80,12 @@ class EffectGstElementPropertyChangeTracker:
 
         return prop_changed
 
-    def _propertyChangedCb(self, gst_element, pspec, unused):
-        old_value = self._tracked_effects[gst_element][pspec.name]
+    def _propertyChangedCb(self, tckobj, gst_element, pspec, unused):
+        old_value = self._tracked_effects[tckobj][pspec.name]
         new_value = gst_element.get_property(pspec.name)
-        action = EffectPropertyChanged(gst_element, pspec.name, old_value,
+        action = EffectPropertyChanged(tckobj, pspec.name, old_value,
                                        new_value)
-        self._tracked_effects[gst_element][pspec.name] = new_value
+        self._tracked_effects[tckobj][pspec.name] = new_value
         self.action_log.push(action)
 
 
@@ -109,7 +100,6 @@ class TrackEffectAdded(UndoableAction):
     def __init__(self, timeline_object, track_object, properties_watcher):
         self.timeline_object = timeline_object
         self.track_object = track_object
-        self.factory = track_object.factory
         self.effect_props = []
         self.gnl_obj_props = []
         self._properties_watcher = properties_watcher
