@@ -27,6 +27,7 @@ A collection of helper classes and routines for:
 """
 
 import math
+import imp
 import os
 import re
 import sys
@@ -104,7 +105,7 @@ class TextWidget(Gtk.HBox, DynamicWidget):
     __INVALID__ = Gdk.Color(0xFFFF, 0, 0)
     __NORMAL__ = Gdk.Color(0, 0, 0)
 
-    def __init__(self, matches=None, choices=None, default=None):
+    def __init__(self, matches=None, choices=None, default=None, text_widget=None):
         if not default:
             # In the case of text widgets, a blank default is an empty string
             default = ""
@@ -114,17 +115,21 @@ class TextWidget(Gtk.HBox, DynamicWidget):
 
         self.set_border_width(0)
         self.set_spacing(0)
-        if choices:
-            self.combo = Gtk.ComboBoxText.new_with_entry()
-            self.text = self.combo.get_child()
-            self.combo.show()
-            self.pack_start(self.combo, expand=True, fill=True, padding=0)
-            for choice in choices:
-                self.combo.append_text(choice)
+
+        if text_widget is None:
+            if choices:
+                self.combo = Gtk.ComboBoxText.new_with_entry()
+                self.text = self.combo.get_child()
+                self.combo.show()
+                self.pack_start(self.combo, expand=True, fill=True, padding=0)
+                for choice in choices:
+                    self.combo.append_text(choice)
+            else:
+                self.text = Gtk.Entry()
+                self.text.show()
+                self.pack_start(self.text, expand=True, fill=True, padding=0)
         else:
-            self.text = Gtk.Entry()
-            self.text.show()
-            self.pack_start(self.text, expand=True, fill=True, padding=0)
+            self.text = text_widget
         self.matches = None
         self.last_valid = None
         self.valid = False
@@ -234,7 +239,7 @@ class NumericWidget(Gtk.HBox, DynamicWidget):
         self.spinner.show()
 
     def connectValueChanged(self, callback, *args):
-        self.adjustment.connect("value-changed", callback, *args)
+        self.adjustment.connect("value-changed", callback, * args)
 
     def getWidgetValue(self):
         if self._type:
@@ -566,10 +571,135 @@ class FontWidget(Gtk.FontButton, DynamicWidget):
         return self.get_font_name()
 
 
+class ResolutionWidget(Gtk.HBox, DynamicWidget):
+
+    def __init__(self, default=None):
+        Gtk.HBox.__init__(self)
+        DynamicWidget.__init__(self, default)
+        self.props.spacing = SPACING
+
+        self.dwidth = 0
+        self.dheight = 0
+        self.dwidthWidget = NumericWidget(lower=0)
+        self.dheightWidget = NumericWidget(lower=0)
+        self.pack_start(self.dwidthWidget, True, True, 0)
+        self.pack_start(Gtk.Label("x", True, True, 0))
+        self.pack_start(self.dheightWidget, True, True, 0)
+        self.setWidgetValue((320, 240))
+        self.show_all()
+
+    def connectValueChanged(self, callback, *args):
+        self.dwidthWidget.connectValueChanged(callback, *args)
+        self.dheightWidget.connectValueChanged(callback, *args)
+
+    def setWidgetValue(self, value):
+        width, height = value
+
+        self.dwidthWidget.setWidgetValue(width)
+        self.dheightWidget.setWidgetValue(height)
+
+    def getWidgetValue(self):
+        return self.dwidthWidget.getWidgetValue(),\
+            self.dheightWidget.getWidgetValue()
+
+if __name__ == '__main__':
+
+    def valueChanged(unused_widget, widget, target):
+        target.set_text(str(widget.getWidgetValue()))
+
+    widgets = (
+        (PathWidget, "file:///home/", ()),
+        (TextWidget, "banana", ()),
+        (TextWidget, "words only", ("^([a-zA-Z]+\s*)+$",)),
+        (TextWidget, "numbers only", ("^\d+$",
+            ("12", "14"))),
+        (NumericWidget, 42, (100, 1)),
+        (ToggleWidget, True, ()),
+        (ChoiceWidget, "banana", ((
+            ("banana", "banana"),
+            ("apple", "apple"),
+            ("pear", "pear")),)),
+        (ColorWidget, 0x336699FF, (int,)),
+        (FontWidget, "Sans 9", ()),
+        (FractionWidget, "30M", (
+            Gst.FractionRange(Gst.Fraction(1, 1),
+            Gst.Fraction(30000, 1001)),
+        )),
+        (FractionWidget, Gst.Fraction(25000, 1001), (
+            Gst.FractionRange(
+                Gst.Fraction(1, 1),
+                Gst.Fraction(30000, 1001)
+            ),
+            ("25:1", Gst.Fraction(30, 1), "30M", ),
+        )),
+    )
+
+    W = Gtk.Window()
+    v = Gtk.VBox()
+    t = Gtk.Table()
+
+    for y, (klass, default, args) in enumerate(widgets):
+        w = klass(*args)
+        w.setWidgetValue(default)
+        l = Gtk.Label(label=str(w.getWidgetValue()))
+        w.connectValueChanged(valueChanged, w, l)
+        w.show()
+        l.show()
+        t.attach(w, 0, 1, y, y + 1)
+        t.attach(l, 1, 2, y, y + 1)
+    t.show()
+
+    W.add(t)
+    W.show()
+    Gtk.main()
+
+
+def make_property_widget(unused_element, prop, value=None):
+    """ Creates a Widget for the given element property """
+    # FIXME : implement the case for flags
+    type_name = GObject.type_name(prop.value_type.fundamental)
+
+    if value is None:
+        value = prop.default_value
+    if type_name == "gchararray":
+        widget = TextWidget(default=prop.default_value)
+    elif type_name in ['guint64', 'gint64', 'guint', 'gint', 'gfloat', 'gulong', 'gdouble']:
+        maximum, minimum = None, None
+        if hasattr(prop, "minimum"):
+            minimum = prop.minimum
+        if hasattr(prop, "maximum"):
+            maximum = prop.maximum
+        widget = NumericWidget(default=prop.default_value, upper=maximum, lower=minimum)
+    elif type_name == "gboolean":
+        widget = ToggleWidget(default=prop.default_value)
+    elif type_name == "GEnum":
+        choices = []
+        for key, val in prop.enum_class.__enum_values__.iteritems():
+            choices.append([val.value_name, int(val)])
+        widget = ChoiceWidget(choices, default=prop.default_value)
+    elif type_name == "GstFraction":
+        widget = FractionWidget(None, presets=["0:1"], default=prop.default_value)
+    else:
+        widget = DefaultWidget(type_name)
+
+    if value is not None and type_name != "GFlags":
+        widget.setWidgetValue(value)
+
+    return widget
+
+
+def make_widget_wrapper(widget):
+    """ Creates a wrapper child of DynamicWidget for @widget """
+    if isinstance(widget, Gtk.Entry):
+        wrapper = TextWidget(widget=widget)
+    # TODO Implement more wrapper for more Gtk.Widget types
+
+
 class GstElementSettingsWidget(Gtk.VBox, Loggable):
     """
     Widget to view/modify properties of a Gst.Element
     """
+    custom_ui_creators = None
 
     def __init__(self, isControllable=True):
         Gtk.VBox.__init__(self)
@@ -579,6 +709,9 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.properties = None
         self.buttons = {}
         self.isControllable = isControllable
+
+        if self.custom_ui_creators is None:
+            self._fill_custom_ui_creators()
 
     def resetKeyframeToggleButtons(self, widget=None):
         """
@@ -607,6 +740,19 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
             if hasattr(track_element, "ui_element"):
                 track_element.ui_element.hideKeyframes()
 
+    @classmethod
+    def _fill_custom_ui_creators(self):
+        customwidgets_dir = os.path.join(os.path.dirname(__file__), "customwidgets")
+        for f in os.listdir(customwidgets_dir):
+            if f.endswith(".py"):
+                modulename = f.replace(".py", "")
+                try:
+                    module = imp.load_source(modulename, os.path.join(customwidgets_dir, f))
+                    self.custom_ui_creators[modulename] = module.create_widget
+                except AttributeError:
+                    # Not create_widget method, do not do anything
+                    pass
+
     def setElement(self, element, properties={}, ignore=['name'],
                    default_btn=False, use_element_props=False):
         """
@@ -616,7 +762,49 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.element = element
         self.ignore = ignore
         self.properties = {}
-        self._addWidgets(properties, default_btn, use_element_props)
+        self.uncontrolled_properties = {}
+        try:
+            factoryname = element.get_element().get_factory().get_name()
+            created = self.custom_ui_creators[factoryname].create_widget(self, element)
+        except KeyError:
+            self._addWidgets(properties, default_btn, use_element_props)
+
+    def addPropertyWidget(self, prop, widget, to_default_btn=None):
+        if isinstance(widget, DynamicWidget):
+            # if the widget is already a DynamicWidget we use it as is
+            dynamic_widget = widget
+        else:
+            # if the widget is not dynamic we try to create a wrapper around it
+            # so we can control it with the standardsed DynamicWidget API
+            dynamic_widget = make_widget_wrapper(widget)
+
+        if dynamic_widget:
+            self.properties[prop] = dynamic_widget
+
+            self.element.connect('notify::' + prop.name, self._propertyChangedCb,
+                    dynamic_widget)
+            # The "reset to default" button associated with this property
+            if isinstance(to_default_btn, Gtk.Button):
+                # The "reset to default" button associated with this property
+                to_default_btn.connect('clicked', self._defaultBtnClickedCb,
+                                       widget)
+                self.buttons[button] = to_default_btn
+            elif to_default_btn is not None:
+                self.warning("to_default_btn should be either a Gtk.Button or "
+                             "None")
+        else:
+            # If we add a none standard widget, the creator of the widget is
+            # responsible for handling its behaviour "by hand"
+            self.info("Can not wrap widget: %s for property" % (widget, prop))
+
+            # we still keep a ref to those widget "just in case"
+            self.uncontrolled_properties[prop] = widget
+
+        if hasattr(prop, 'blurb'):
+            widget.set_tooltip_text(prop.blurb)
+
+    def addIgnoreProperty(self, ignore):
+        self.ignore.append(ignore)
 
     def _addWidgets(self, properties, default_btn, use_element_props):
         """
@@ -630,11 +818,12 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.bindings = {}
         self.keyframeToggleButtons = {}
         is_effect = False
-        if isinstance(self.element, GES.Effect):
+        if isinstance(self.element, GES.BaseEffect):
             is_effect = True
             props = [prop for prop in self.element.list_children_properties() if not prop.name in self.ignore]
         else:
             props = [prop for prop in GObject.list_properties(self.element) if not prop.name in self.ignore]
+
         if not props:
             table = Gtk.Table(n_rows=1, n_columns=1)
             widget = Gtk.Label(label=_("No properties."))
@@ -690,9 +879,6 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
             if hasattr(prop, 'blurb'):
                 widget.set_tooltip_text(prop.blurb)
 
-            self.properties[prop] = widget
-
-            # The "reset to default" button associated with this property
             if default_btn:
                 widget.propName = prop.name.split("-")[0]
 
@@ -702,10 +888,12 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
                     if binding:
                         widget.set_sensitive(False)
                         self.bindings[widget] = binding
-                button = self._getResetToDefaultValueButton(prop, widget)
-                table.attach(button, 2, 3, y, y + 1, xoptions=Gtk.AttachOptions.FILL, yoptions=Gtk.AttachOptions.FILL)
-                self.buttons[button] = widget
+                to_default_btn = self.getResetToDefaultValueButton(prop, widget)
+                table.attach(to_default_btn, 2, 3, y, y + 1,
+                             xoptions=Gtk.AttachOptions.FILL,
+                             yoptions=Gtk.AttachOptions.FILL)
 
+            self.addPropertyWidget(prop, widget, None)
             y += 1
 
         self.element.connect('deep-notify', self._propertyChangedCb)
@@ -732,6 +920,9 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         button.set_tooltip_text(_("Reset to default value"))
         button.set_relief(Gtk.ReliefStyle.NONE)
         button.connect('clicked', self._defaultBtnClickedCb, widget)
+
+        # Directly add it to the buttong dictionnary
+        self.buttons[button] = widget
         return button
 
     def _setKeyframeToggleButtonState(self, button, active_state):
