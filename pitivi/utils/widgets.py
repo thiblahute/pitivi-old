@@ -37,6 +37,7 @@ from gi.repository import Gdk
 from gi.repository import Gst
 from gi.repository import GES
 from gi.repository import Pango
+from gi.repository import GLib
 from gi.repository import GObject
 
 from gettext import gettext as _
@@ -699,6 +700,7 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
     """
     Widget to view/modify properties of a Gst.Element
     """
+
     custom_ui_creators = None
 
     def __init__(self, isControllable=True):
@@ -710,6 +712,7 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.buttons = {}
         self.isControllable = isControllable
 
+        self._unhandled_properties = []
         if self.custom_ui_creators is None:
             self._fill_custom_ui_creators()
 
@@ -742,6 +745,7 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
 
     @classmethod
     def _fill_custom_ui_creators(self):
+        self.custom_ui_creators = {}
         customwidgets_dir = os.path.join(os.path.dirname(__file__), "customwidgets")
         for f in os.listdir(customwidgets_dir):
             if f.endswith(".py"):
@@ -763,11 +767,41 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.ignore = ignore
         self.properties = {}
         self.uncontrolled_properties = {}
-        try:
-            factoryname = element.get_element().get_factory().get_name()
-            created = self.custom_ui_creators[factoryname].create_widget(self, element)
-        except KeyError:
+        created = False
+        if isinstance(element, GES.Effect):
+            bin_description = element.props.bin_description
+            try:
+                # First try to create the widget thanks to a custom python coded
+                # "override"
+                created = self.custom_ui_creators[bin_description](self, element)
+            except KeyError:
+                pass
+            if not created:
+                try:
+                    # Then try to find a Glade file
+                    builder = Gtk.Builder()
+                    builder.add_from_file(os.path.join(get_ui_dir(),
+                                          "customwidgets", bin_description + ".ui"))
+                    self.mapBuilder(builder)
+                    created = True
+                except GLib.GError:
+                    pass
+
+        if not created:
+            # Finaly we generate the widget
             self._addWidgets(properties, default_btn, use_element_props)
+
+    def mapBuilder(self, builder):
+        for prop in self._getProperties():
+            widget_name = prop.owner_type.name + "::" + prop.name
+            widget = builder.get_object(widget_name)
+            reset_name = widget_name + "::" + "reset"
+            reset_widget = builder.get_object(widget_name)
+            if widget is None:
+                self._unhandled_properties.append(prop)
+            else:
+                element_setting_widget.addPropertyWidget(prop, widget,
+                                                         reset_widget)
 
     def addPropertyWidget(self, prop, widget, to_default_btn=None):
         if isinstance(widget, DynamicWidget):
@@ -806,6 +840,13 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
     def addIgnoreProperty(self, ignore):
         self.ignore.append(ignore)
 
+    def _getProperties(self):
+        if isinstance(self.element, GES.BaseEffect):
+            is_effect = True
+            return [prop for prop in self.element.list_children_properties() if not prop.name in self.ignore]
+        else:
+            return [prop for prop in GObject.list_properties(self.element) if not prop.name in self.ignore]
+
     def _addWidgets(self, properties, default_btn, use_element_props):
         """
         Prepare a gtk table containing the property widgets of an element.
@@ -818,12 +859,8 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
         self.bindings = {}
         self.keyframeToggleButtons = {}
         is_effect = False
-        if isinstance(self.element, GES.BaseEffect):
-            is_effect = True
-            props = [prop for prop in self.element.list_children_properties() if not prop.name in self.ignore]
-        else:
-            props = [prop for prop in GObject.list_properties(self.element) if not prop.name in self.ignore]
 
+        props = self._getProperties()
         if not props:
             table = Gtk.Table(n_rows=1, n_columns=1)
             widget = Gtk.Label(label=_("No properties."))

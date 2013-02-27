@@ -106,6 +106,7 @@ pitivi/configure.py
 pitivi/dialogs/Makefile
 pitivi/undo/Makefile
 pitivi/utils/Makefile
+pitivi/utils/customwidgets/Makefile
 pitivi/timeline/Makefile
 pitivi/coptimizations/Makefile
 po/Makefile.in
