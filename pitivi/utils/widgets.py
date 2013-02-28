@@ -935,12 +935,12 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
             widget = self._makePropertyWidget(prop, prop_value)
             if isinstance(widget, ToggleWidget):
                 widget.set_label(prop.nick)
-                table.attach(widget, 0, 2, y, y + 1, yoptions=Gtk.AttachOptions.FILL)
+                table.attach(widget, 0, 2, y, y + 1, yoptions=FILL)
             else:
                 label = Gtk.Label(label=prop.nick + ":")
                 label.set_alignment(0.0, 0.5)
-                table.attach(label, 0, 1, y, y + 1, xoptions=Gtk.AttachOptions.FILL, yoptions=Gtk.AttachOptions.FILL)
-                table.attach(widget, 1, 2, y, y + 1, yoptions=Gtk.AttachOptions.FILL)
+                table.attach(label, 0, 1, y, y + 1, xoptions=FILL, yoptions=FILL)
+                table.attach(widget, 1, 2, y, y + 1, yoptions=FILL)
 
             if not isinstance(widget, ToggleWidget) and not isinstance(widget, ChoiceWidget) and self.isControllable:
                 button = self._getKeyframeToggleButton(prop)
@@ -952,7 +952,6 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
 
             if default_btn:
                 widget.propName = prop.name.split("-")[0]
-
                 if self.isControllable:
                     # If this element is controlled, the value means nothing anymore.
                     binding = self.element.get_control_binding(prop.name)
