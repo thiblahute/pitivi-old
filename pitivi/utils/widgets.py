@@ -261,15 +261,13 @@ class NumericWidget(Gtk.HBox, DynamicWidget):
         if type(value) is tuple:
             value = value[-1]  # Grab the last item of the tuple
 
-        type_ = type(value)
-        if self._type is None:
-            self._type = type_
+        self._type = type(value)
 
-        if type_ == int or type_ == int:
+        if self._type == int or self._type == long:
             minimum, maximum = (-sys.maxsize, sys.maxsize)
             step = 1.0
             page = 10.0
-        elif type_ == float:
+        elif self._type == float:
             minimum, maximum = (GObject.G_MINDOUBLE, GObject.G_MAXDOUBLE)
             step = 0.01
             page = 0.1
