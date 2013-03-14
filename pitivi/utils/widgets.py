@@ -225,7 +225,8 @@ class NumericWidget(Gtk.HBox, DynamicWidget):
                 self.slider.props.draw_value = False
                 # Abuse GTK3's progressbar "fill level" feature to provide
                 # a visual indication of the default value on property sliders.
-                if default is not None:
+                # "default > lower" handles off-boundaries values like -1
+                if default and default > lower:
                     self.slider.set_restrict_to_fill_level(False)
                     self.slider.set_fill_level(float(default))
                     self.slider.set_show_fill_level(True)
