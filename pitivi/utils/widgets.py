@@ -928,7 +928,7 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
                     self.debug("Could not get value for property: %s", prop.name)
             else:
                 if use_element_props:
-                    prop_value = self.element.get_property(prop.name)
+                    prop_value = self.element.get_child_property(prop.name)
                 else:
                     prop_value = properties.get(prop.name)
 
