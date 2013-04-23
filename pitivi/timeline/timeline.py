@@ -647,6 +647,10 @@ class Timeline(Gtk.VBox, Zoomable):
         else:
             self._scrollToPosition(position)
 
+    def seekInPosition(self, position):
+        self.pressed = True
+        self._seeker.seek(position)
+
     def setTimeline(self, bTimeline):
         self.bTimeline = bTimeline
         self.timeline.selection.connect("selection-changed", self._selectionChangedCb)

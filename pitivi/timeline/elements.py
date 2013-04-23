@@ -32,7 +32,7 @@ import math
 import os
 import cairo
 
-from gi.repository import Clutter, Cogl, GES, Gdk, GstController
+from gi.repository import Clutter, Cogl, GES, Gdk, Gst, GstController
 from pitivi.utils.timeline import Zoomable, EditingContext, Selection, SELECT, UNSELECT, Selected
 from previewers import VideoPreviewer, BORDER_WIDTH
 
@@ -556,20 +556,24 @@ class Line(Clutter.Actor):
         cr.stroke()
 
     def transposeXY(self, x, y):
-        x -= self.timelineElement.props.x + CONTROL_WIDTH
+        x -= self.timelineElement.props.x + CONTROL_WIDTH - self.timelineElement.timeline._scroll_point.x
         y -= self.timelineElement.props.y
         return x, y
 
     def _clickedCb(self, actor, event):
         x, y = self.transposeXY(event.x, event.y)
         value = 1.0 - (y / EXPANDED_SIZE)
+        value = max(0.0, value)
+        value = min(1.0, value)
         timestamp = Zoomable.pixelToNs(x)
         self.timelineElement.addKeyframe(value, timestamp)
 
     def _enterEventCb(self, actor, event):
+        self.timelineElement.set_reactive(False)
         self.timelineElement.timeline._container.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.HAND1))
 
     def _leaveEventCb(self, actor, event):
+        self.timelineElement.set_reactive(True)
         self.timelineElement.timeline._container.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.ARROW))
 
     def _motionEventCb(self, actor, event):
@@ -592,30 +596,65 @@ class Keyframe(Clutter.Actor):
         self.dragAction.connect("drag-begin", self._dragBeginCb)
         self.dragAction.connect("drag-end", self._dragEndCb)
         self.dragAction.connect("drag-progress", self._dragProgressCb)
+        self.connect("key-press-event", self._keyPressEventCb)
         self.connect("enter-event", self._enterEventCb)
         self.connect("leave-event", self._leaveEventCb)
         self.set_reactive(True)
 
+    def _keyPressEventCb(self, actor, event):
+        print event, dir(event)
+
     def _enterEventCb(self, actor, event):
+        self.timelineElement.set_reactive(False)
+        self.set_background_color(Clutter.Color.new(0, 0, 0, 255))
         self.timelineElement.timeline._container.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.HAND1))
 
     def _leaveEventCb(self, actor, event):
+        self.timelineElement.set_reactive(True)
+        self.set_background_color(Clutter.Color.new(0, 255, 0, 255))
         self.timelineElement.timeline._container.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.ARROW))
 
     def _dragBeginCb(self, action, actor, event_x, event_y, modifiers):
         self.dragBeginStartX = event_x
         self.dragBeginStartY = event_y
-        self.valueStart = self.value
+        self.lastTs = self.value.timestamp
+        self.valueStart = self.value.value
+        self.tsStart = self.value.timestamp
+        self.duration = self.timelineElement.bElement.props.duration
+        self.inpoint = self.timelineElement.bElement.props.in_point
+        self.start = self.timelineElement.bElement.props.start
 
     def _dragProgressCb(self, action, actor, delta_x, delta_y):
         coords = self.dragAction.get_motion_coords()
         delta_x = coords[0] - self.dragBeginStartX
         delta_y = coords[1] - self.dragBeginStartY
+        newTs = self.tsStart + Zoomable.pixelToNs(delta_x)
+        newValue = self.valueStart - (delta_y / EXPANDED_SIZE)
+
+        if newTs < self.inpoint or newTs > self.duration:
+            return False
+
+        if newValue < 0.0 or newValue > 1.0:
+            return False
+
+        self.timelineElement.source.unset(self.lastTs)
+        if (self.timelineElement.source.set(newTs, newValue)):
+            self.value = Gst.TimedValue()
+            self.value.timestamp = newTs
+            self.value.value = newValue
+
+            self.lastTs = newTs
+
+            self.timelineElement.setKeyframePosition(self, self.value)
+            self.timelineElement.keyframes = sorted(self.timelineElement.keyframes, key=lambda keyframe: keyframe.value.timestamp)
+            self.timelineElement.drawLines()
+            # This will update the viewer. nifty.
+            self.timelineElement.timeline._container.seekInPosition(newTs + self.start)
+
         return False
 
     def _dragEndCb(self, action, actor, event_x, event_y, modifiers):
-        coords = self.dragAction.get_motion_coords()
-        delta_x = coords[0] - self.dragBeginStartX
+        pass
 
 
 class URISourceElement(TimelineElement):
@@ -633,7 +672,7 @@ class URISourceElement(TimelineElement):
         self.updateKeyframes()
 
     def showKeyframes(self, effect, propname):
-        binding = self.bElement.get_control_binding(propname.name)
+        binding = effect.get_control_binding(propname.name)
         if not binding:
             source = GstController.InterpolationControlSource()
             source.props.mode = GstController.InterpolationMode.LINEAR
@@ -641,13 +680,32 @@ class URISourceElement(TimelineElement):
                 print "There was something like a problem captain"
                 return
             val = float(propname.default_value) / (propname.maximum - propname.minimum)
-            source.set(self.bElement.props.in_point, 1.0)
-            source.set(self.bElement.props.duration, 0.0)
-            self.source = source
+            source.set(self.bElement.props.in_point, val)
+            source.set(self.bElement.props.duration, val)
             binding = effect.get_control_binding(propname.name)
         self.binding = binding
+        self.source = self.binding.props.control_source
         self.prop = propname
         self.updateKeyframes()
+
+    def setKeyframePosition(self, keyframe, value):
+        x = self.nsToPixel(value.timestamp) - KEYFRAME_SIZE / 2
+        y = EXPANDED_SIZE - (value.value * EXPANDED_SIZE)
+
+        keyframe.set_z_position(2)
+        keyframe.set_position(x, y)
+
+    def drawLines(self):
+        for line in self.lines:
+            self.remove_child(line)
+
+        self.lines = []
+
+        lastKeyframe = None
+        for keyframe in self.keyframes:
+            if lastKeyframe:
+                self._createLine(keyframe.value, lastKeyframe.value)
+            lastKeyframe = keyframe
 
     def updateKeyframes(self):
         if not self.source:
@@ -661,27 +719,27 @@ class URISourceElement(TimelineElement):
 
         self.keyframes = []
 
-        for line in self.lines:
-            self.remove_child(line)
-
-        self.lines = []
-
         for value in values:
-            if lastPoint:
-                self._createLine(value, lastPoint)
             self._createKeyframe(value)
             lastPoint = value
 
+        self.drawLines()
+
     # private API
 
-    def _createKeyframe(self, value):
+    def _setKeyframePosition(self, keyframe, value):
         x = self.nsToPixel(value.timestamp) - KEYFRAME_SIZE / 2
         y = EXPANDED_SIZE - (value.value * EXPANDED_SIZE)
-        keyframe = Keyframe(self, value)
-        self.add_child(keyframe)
-        self.keyframes.append(keyframe)
+
         keyframe.set_z_position(2)
         keyframe.set_position(x, y)
+
+    def _createKeyframe(self, value):
+        keyframe = Keyframe(self, value)
+
+        self.add_child(keyframe)
+        self.keyframes.append(keyframe)
+        self.setKeyframePosition(keyframe, value)
 
     def _createLine(self, value, lastPoint):
         line = Line(self)
