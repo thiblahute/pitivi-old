@@ -657,9 +657,20 @@ class Keyframe(Clutter.Actor):
         pass
 
 
+class DummyPropNameVolume:
+    def __init__(self):
+        self.name = "volume"
+        self.minimum = 0.0
+        self.maximum = 10.0
+        self.default_value = 1.0
+
+
 class URISourceElement(TimelineElement):
     def __init__(self, bElement, track, timeline):
         TimelineElement.__init__(self, bElement, track, timeline)
+        if track.type == GES.TrackType.AUDIO:
+            propname = DummyPropNameVolume()
+            self.showKeyframes(self.bElement, propname)
 
     # public API
 
