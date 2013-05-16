@@ -865,24 +865,6 @@ class Project(Loggable, GES.Project):
             scale = 100
         return self.videowidth * scale / 100, self.videoheight * scale / 100
 
-    def getVideoCaps(self, render=False):
-        """ Returns the GstCaps corresponding to the video settings """
-        videowidth, videoheight = self.getVideoWidthAndHeight(render=render)
-        vstr = "width=%d,height=%d,pixel-aspect-ratio=%d/%d,framerate=%d/%d" % (
-            videowidth, videoheight,
-            self.videopar.num, self.videopar.denom,
-            self.videorate.num, self.videorate.denom)
-        caps_str = "video/x-raw,%s" % (vstr)
-        video_caps = Gst.caps_from_string(caps_str)
-        return video_caps
-
-    def getAudioCaps(self):
-        """ Returns the GstCaps corresponding to the audio settings """
-        astr = "rate=%d,channels=%d" % (self.audiorate, self.audiochannels)
-        caps_str = "audio/x-raw,%s" % (astr)
-        audio_caps = Gst.caps_from_string(caps_str)
-        return audio_caps
-
     def setAudioProperties(self, nbchanns=-1, rate=-1):
         """
         Set the number of audio channels and the rate
