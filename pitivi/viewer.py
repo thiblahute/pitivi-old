@@ -330,7 +330,7 @@ class PitiviViewer(Gtk.VBox, Loggable):
         self.app.current.pipeline.togglePlayback()
 
     def _goToStartCb(self, unused_button):
-        self.seeker.seek(0)
+        self.seeker.seek(0.1 * Gst.SECOND)
 
     def _backCb(self, unused_button):
         # Seek backwards one second

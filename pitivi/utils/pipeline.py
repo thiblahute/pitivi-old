@@ -359,7 +359,7 @@ class SimplePipeline(Signallable, Loggable):
         if format == Gst.Format.TIME:
             position = max(0, min(position, self.getDuration()) - 1)
 
-        res = self._pipeline.seek(1.0, format, Gst.SeekFlags.FLUSH,
+        res = self._pipeline.seek(1.0, format, Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
                                   Gst.SeekType.SET, position,
                                   Gst.SeekType.NONE, -1)
         if not res:
@@ -380,6 +380,8 @@ class SimplePipeline(Signallable, Loggable):
     ## Private methods
 
     def _busMessageCb(self, unused_bus, message):
+        if message.type == Gst.MessageType.QOS:
+            print message.parse_qos(), message.src
         if message.type == Gst.MessageType.EOS:
             self.pause()
             self.emit('eos')

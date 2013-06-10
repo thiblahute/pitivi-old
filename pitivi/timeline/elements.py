@@ -350,6 +350,8 @@ class TimelineElement(Clutter.Actor, Zoomable):
         self.lines = []
         self.keyframes = []
         self.source = None
+        self.action_log = self.timeline._container.app.action_log
+
         size = self.bElement.get_duration()
 
         self._createBackground(track)
@@ -665,11 +667,22 @@ class DummyPropNameVolume:
         self.default_value = 1.0
 
 
+class DummyPropNameAlpha:
+    def __init__(self):
+        self.name = "alpha"
+        self.minimum = 0.0
+        self.maximum = 1.0
+        self.default_value = 1.0
+
+
 class URISourceElement(TimelineElement):
     def __init__(self, bElement, track, timeline):
         TimelineElement.__init__(self, bElement, track, timeline)
         if track.type == GES.TrackType.AUDIO:
             propname = DummyPropNameVolume()
+            self.showKeyframes(self.bElement, propname)
+        elif track.type == GES.TrackType.VIDEO:
+            propname = DummyPropNameAlpha()
             self.showKeyframes(self.bElement, propname)
 
     # public API
@@ -808,7 +821,7 @@ class URISourceElement(TimelineElement):
                                        mode,
                                        GES.Edge.EDGE_NONE,
                                        self.timeline.selection.getSelectedTrackElements(),
-                                       None)
+                                       None, self.action_log)
         # This can't change during a drag, so we can safely compute it now for drag events.
         nbrLayers = len(self.timeline.bTimeline.get_layers())
         self.brother = self.timeline.findBrother(self.bElement)

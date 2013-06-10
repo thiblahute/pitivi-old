@@ -186,6 +186,7 @@ class UndoableActionLog(Signallable, Loggable):
         self.emit("commit", stack, nested)
 
     def undo(self):
+        print "about to undo"
         if self.stacks or not self.undo_stacks:
             raise UndoWrongStateError()
 

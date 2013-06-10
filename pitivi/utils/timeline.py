@@ -213,7 +213,7 @@ class EditingContext(Signallable):
         "clip-trim-finished": [],
     }
 
-    def __init__(self, focus, timeline, mode, edge, other, settings):
+    def __init__(self, focus, timeline, mode, edge, other, settings, action_log):
         """
         @param focus: the Clip or TrackElement which is to be the
         main target of interactive editing, such as the object directly under the
@@ -255,6 +255,9 @@ class EditingContext(Signallable):
         self.edge = edge
         self.mode = mode
 
+        self.action_log = action_log
+        self.action_log.begin("edit object")
+
         self.timeline.enable_update(False)
 
     def finish(self):
@@ -262,6 +265,7 @@ class EditingContext(Signallable):
         # TODO: post undo / redo action here
         self.timeline.enable_update(True)
         self.emit("clip-trim-finished")
+        self.action_log.commit()
 
     def setMode(self, mode):
         """Set the current editing mode.
