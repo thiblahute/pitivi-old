@@ -243,7 +243,8 @@ class EditingContext(Signallable):
         Signallable.__init__(self)
 
         # make sure focus is not in secondary object list
-        other.difference_update(set((focus,)))
+        if other:
+            other.difference_update(set((focus,)))
 
         self.other = other
         if isinstance(focus, GES.TrackElement):
