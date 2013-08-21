@@ -237,6 +237,7 @@ class ProjectPropertiesTest(HelpFunc):
         self.goToEnd_button = self.viewer.child(name="goToEnd_button")
         seektime = self.viewer.child(name="timecode_entry").child(roleName="text")
         infobar_media = self.medialibrary.child(name="Information", roleName="alert")
+        iconview = self.medialibrary.child(roleName="layered pane")
         filename1 = "/tmp/test_project-%i.xptv" % time()
         filename2 = "/tmp/test_project-%i.xptv" % time()
         self.unlink.append(filename1)
@@ -252,15 +253,15 @@ class ProjectPropertiesTest(HelpFunc):
         self.saveProject(filename1)
         self.assertFalse(infobar_media.showing)
 
-        #Create new, check if cleaned
+        # Creating a blank project should clear the library and show its infobar
         sleep(0.5)
         self.menubar.menu("Project").click()
         self.menubar.menu("Project").menuItem("New").click()
         self.pitivi.child(name="Project Settings", roleName="dialog", recursive=False).button("OK").click()
 
-        icons = self.medialibrary.findChildren(GenericPredicate(roleName="icon"))
         self.goToEnd_button.click()
-        self.assertEqual(len(icons), 0)
+        self.assertEqual(len(iconview.children), 0,
+            "Created a new project, but the media library is not empty")
         self.assertTrue(infobar_media.showing)
 
         #Create bigger project
@@ -272,16 +273,14 @@ class ProjectPropertiesTest(HelpFunc):
 
         #Load first, check if populated
         self.load_project(filename1)
-        icons = self.medialibrary.findChildren(GenericPredicate(roleName="icon"))
         self.goToEnd_button.click()
-        self.assertEqual(len(icons), 1)
+        self.assertEqual(len(iconview.children), 1)
         self.assertEqual(seektime.text, DURATION_OF_ONE_CLIP)
         self.assertFalse(infobar_media.showing)
 
         #Load second, check if populated
         self.load_project(filename2)
-        icons = self.medialibrary.findChildren(GenericPredicate(roleName="icon"))
         self.goToEnd_button.click()
-        self.assertEqual(len(icons), 2)
+        self.assertEqual(len(iconview.children), 2)
         self.assertEqual(seektime.text, DURATION_OF_TWO_CLIPS)
         self.assertFalse(infobar_media.showing)
