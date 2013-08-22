@@ -48,6 +48,7 @@ class ProjectPropertiesTest(HelpFunc):
         video = dialog.tab("Video")
 
         # Select a different preset
+        # CAUTION: changing the resolution changes the pixel aspect ratio!
         video.child(name="720p24", roleName="table cell").click()
         children = video.findChildren(IsATextEntryNamed(""))
         childtext = {}  # The framerate, DAR and PAR custom text entry widgets
@@ -131,31 +132,39 @@ class ProjectPropertiesTest(HelpFunc):
         settings_test_project_file = "/tmp/auto_pitivi_test_project_settings.xges"
         self.unlink.append(settings_test_project_file)
         self.saveProject(settings_test_project_file)
-        sleep(1)  # Give enough time for GES to save the project
-        self.assertTrue(os.path.exists(settings_test_project_file))
-        # Load project and test settings
+        self.assertTrue(self.wait_for_file(settings_test_project_file))
+        # Really quit to be sure the stuff was correctly serialized
+        self.tearDown(clean=False, kill=False)
+        self.setUp()
         self.loadProject(settings_test_project_file)
         sleep(1)  # Give enough time for GES to load the project
         self.pitivi.menu("Edit").click()
         self.pitivi.menuItem("Project Settings").click()
-
+        # Since we shut down the whole app, we must reset our shortcut variables:
         dialog = self.pitivi.child(name="Project Settings", roleName="dialog", recursive=False)
         video = dialog.tab("Video")
-        children = video.findChildren(IsATextEntryNamed(""))
-        childtext = {}
-        for child in children:
-            childtext[child.text] = child
-        self.assertIn("333:320", childtext, "Pixel aspect ratio not saved")
-        self.assertIn("37:20", childtext, "Display aspect ratio not saved")
 
         # Check the resolution:
         children = video.findChildren(GenericPredicate(roleName="spin button"))
         spintext = {}
         for child in children:
             spintext[child.text] = child
-
         self.assertIn("500", spintext, "Video height was not saved")
         self.assertIn("1000", spintext, "Video width was not saved")
+
+        # Check the aspect ratios:
+        dialog = self.pitivi.child(name="Project Settings", roleName="dialog", recursive=False)
+        video = dialog.tab("Video")
+        children = video.findChildren(IsATextEntryNamed(""))
+        childtext = {}  # The framerate, DAR and PAR custom text entry widgets
+        for child in children:
+            childtext[child.text] = child
+        # You'd expect a PAR of 333:320 and DAR of 37:20... but we changed the
+        # resolution (500x1000) right before saving, so the PAR changed to 37:10
+        self.assertIn("37:10", childtext, "Pixel aspect ratio was not saved")
+        # However, the DAR is expected to be unaffected by the image resolution:
+        self.assertEqual(displayCombo.combovalue, "Cinema (1.85)")
+        self.assertIn("37:20", childtext, "Display aspect ratio was not saved")
 
     def test_backup(self):
         # FIXME: this test would fail in listview mode - for now we just force iconview mode.
