@@ -32,6 +32,7 @@ class HelpFunc(BaseDogTail):
             proj_menu.menuItem("Save").click()
 
     def loadProject(self, url, unsaved_changes=None):
+        dogtail.rawinput.pressKey("Esc")  # Ensure the welcome dialog is closed
         proj_menu = self.menubar.menu("Project")
         proj_menu.click()
         proj_menu.menuItem("Open...").click()
@@ -109,6 +110,7 @@ class HelpFunc(BaseDogTail):
         for i in range(n):
             sleep(0.3)
             self.insert_button.click()
+        sleep(n / 2.0)  # Inserting clips takes time!
         icon.deselect()
 
     def import_media(self, filename="tears of steel.webm"):

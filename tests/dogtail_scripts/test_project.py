@@ -261,12 +261,12 @@ class ProjectPropertiesTest(HelpFunc):
         # FIXME: this test would fail in listview mode - for now we just force iconview mode.
         self.force_medialibrary_iconview_mode()
 
-        #Create project
+        # Create project #1 - one clip with only one instance on the timeline
         self.assertTrue(infobar_media.showing)
-        sample = self.import_media()
-        self.insert_clip(sample)
-        self.saveProject(filename1)
+        project1_sample1 = self.import_media()
         self.assertFalse(infobar_media.showing)
+        self.insert_clip(project1_sample1)
+        self.saveProject(filename1)
 
         # Creating a blank project should clear the library and show its infobar
         sleep(0.5)
@@ -274,28 +274,45 @@ class ProjectPropertiesTest(HelpFunc):
         self.menubar.menu("Project").menuItem("New").click()
         self.pitivi.child(name="Project Settings", roleName="dialog", recursive=False).button("OK").click()
 
-        self.goToEnd_button.click()
         self.assertEqual(len(iconview.children), 0,
             "Created a new project, but the media library is not empty")
         self.assertTrue(infobar_media.showing)
-
-        #Create bigger project
-        sample = self.import_media()
-        self.import_media("flat_colour1_640x480.png")
-        self.insert_clip(sample, 2)
-        self.saveProject(filename2)
-        self.assertFalse(infobar_media.showing)
-
-        #Load first, check if populated
-        self.load_project(filename1)
+        # We don't have a very good way to check that the timeline was cleared,
+        # but this is better than nothing as a quick sanity check:
         self.goToEnd_button.click()
-        self.assertEqual(len(iconview.children), 1)
-        self.assertEqual(seektime.text, DURATION_OF_ONE_CLIP)
-        self.assertFalse(infobar_media.showing)
+        sleep(0.5)
+        self.assertEqual(seektime.text, "0:00:00.000", "The timeline is not empty")
 
-        #Load second, check if populated
-        self.load_project(filename2)
+        # Create project #2 - 2 clips with 2 timeline instances of the first one
+        # We use only the first one on the timeline because we know its duration
+        project2_sample1 = self.import_media()
+        __project2_sample2 = self.import_media("flat_colour1_640x480.png")
+        self.assertFalse(infobar_media.showing)
+        sleep(0.5)
+        self.insert_clip(project2_sample1, 2)
+        sleep(1)
         self.goToEnd_button.click()
-        self.assertEqual(len(iconview.children), 2)
         self.assertEqual(seektime.text, DURATION_OF_TWO_CLIPS)
+        self.saveProject(filename2)
+
+        # Provoke an unsaved change and switch back to project #1.
+        # - We should be warned about unsaved changes
+        # - The number of clips in the library should have changed
+        # - The timeline length should have changed
+        sleep(1)
+        project2_sample1.click()
+        sleep(0.5)
+        self.medialibrary.child(name="media_remove_button").click()
+        self.loadProject(filename1, unsaved_changes="discard")
+        sleep(3)
+        self.assertEqual(len(iconview.children), 1)
         self.assertFalse(infobar_media.showing)
+        self.goToEnd_button.click()
+        self.assertEqual(seektime.text, DURATION_OF_ONE_CLIP)
+        # Switch back to project #2, expect the same thing.
+        self.loadProject(filename2)
+        sleep(3)
+        self.assertEqual(len(iconview.children), 2)
+        self.assertFalse(infobar_media.showing)
+        self.goToEnd_button.click()
+        self.assertEqual(seektime.text, DURATION_OF_TWO_CLIPS)
