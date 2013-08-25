@@ -269,11 +269,6 @@ class ProjectManager(Signallable, Loggable):
                           _("You do not have permissions to write to this folder."))
                 return
 
-        if uri is None:
-            self.emit("save-project-failed", uri,
-                      _("Cannot save with this file format."))
-            return
-
         try:
             saved = self.current.save(self.current.timeline, uri, formatter_type, overwrite)
         except Exception, e:
@@ -293,9 +288,7 @@ class ProjectManager(Signallable, Loggable):
                 self.current.uri = uri
             else:
                 self.debug('Saved backup "%s"' % uri)
-        else:
-            self.emit("save-project-failed", uri,
-                      _("Cannot save with this file format"))
+
         return saved
 
     def exportProject(self, project, uri):
