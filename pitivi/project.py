@@ -273,8 +273,7 @@ class ProjectManager(Signallable, Loggable):
             saved = self.current.save(self.current.timeline, uri, formatter_type, overwrite)
         except Exception, e:
             saved = False
-            self.emit("save-project-failed", uri,
-                      _("Cannot save with this file format. %s"), e)
+            self.emit("save-project-failed", uri, e)
 
         if saved:
             if not backup:
