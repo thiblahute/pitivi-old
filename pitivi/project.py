@@ -169,11 +169,14 @@ class ProjectManager(Signallable, Loggable):
         if self.current.createTimeline():
             self.emit("new-project-created", self.current)
             self.current.connect("project-changed", self._projectChangedCb)
+            return
         else:
             self.emit("new-project-failed", uri,
                       _('This might be due to a bug or an unsupported project file format. '
                       'If you were trying to add a media file to your project, '
                       'use the "Import" button instead.'))
+            self.newBlankProject()
+            return
 
     def _restoreFromBackupDialog(self, time_diff):
         """
