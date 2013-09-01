@@ -232,7 +232,7 @@ class ProjectManager(Signallable, Loggable):
         else:
             return False
 
-    def saveProject(self, uri=None, overwrite=False, formatter_type=None, backup=False):
+    def saveProject(self, uri=None, formatter_type=None, backup=False):
         """
         Save the current project. All arguments are optional, but the behavior
         will differ depending on the combination of which ones are set.
@@ -272,7 +272,10 @@ class ProjectManager(Signallable, Loggable):
                 return
 
         try:
-            saved = self.current.save(self.current.timeline, uri, formatter_type, overwrite)
+            # "overwrite" is always True: our GTK filechooser save dialogs are
+            # set to always ask the user on our behalf about overwriting, so
+            # if saveProject is actually called, that means overwriting is OK.
+            saved = self.current.save(self.current.timeline, uri, formatter_type, overwrite=True)
         except Exception, e:
             saved = False
             self.emit("save-project-failed", uri, e)
@@ -307,7 +310,7 @@ class ProjectManager(Signallable, Loggable):
             tmp_uri = os.path.join(directory, tmp_name)
             # saveProject updates the project URI... so we better back it up:
             _old_uri = self.current.uri
-            self.saveProject(tmp_uri, overwrite=True)
+            self.saveProject(tmp_uri)
             if self.current.uri != _old_uri:
                 self.current.uri = _old_uri
 
@@ -435,7 +438,7 @@ class ProjectManager(Signallable, Loggable):
             self._backup_lock -= 5
             return True
         else:
-            self.saveProject(overwrite=True, backup=True)
+            self.saveProject(backup=True)
             self._backup_lock = 0
         return False
 
