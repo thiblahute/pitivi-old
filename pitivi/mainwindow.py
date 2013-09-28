@@ -1125,6 +1125,7 @@ class PitiviMainWindow(Gtk.Window, Loggable):
         self.app.current_project.connect("rendering-settings-changed", self._renderingSettingsChangedCb)
 
         self.viewer.setPipeline(self.app.current_project.pipeline)
+        self.app.timelineLogObserver.setPipeline(self.app.current_project.pipeline)
         self._renderingSettingsChangedCb(self.app.current_project)
         if self.timeline_ui:
             self.clipconfig.project = self.app.current_project

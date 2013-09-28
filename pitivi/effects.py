@@ -607,7 +607,7 @@ class EffectListWidget(Gtk.VBox, Loggable):
         else:
             return [dnd.AUDIO_EFFECT_TARGET_ENTRY, dnd.EFFECT_TARGET_ENTRY]
 
-PROPS_TO_IGNORE = ['name', 'qos', 'silent', 'message']
+PROPS_TO_IGNORE = ['name', 'qos', 'silent', 'message', 'parent']
 
 
 class EffectsPropertiesManager:
@@ -669,7 +669,7 @@ class EffectsPropertiesManager:
 
         return effect_set_ui
 
-    def _connectAllWidgetCbs(self, unused_effect_configuration_ui, unused_effect):
+    def _connectAllWidgetCbs(self, effect_configuration_ui, unused_effect):
         for prop, widget in effect_configuration_ui.properties.iteritems():
             widget.connectValueChanged(self._onValueChangedCb, widget, prop)
 
