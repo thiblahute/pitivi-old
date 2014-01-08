@@ -19,9 +19,7 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
-"""
-Project related classes
-"""
+""" Project related classes. """
 
 import os
 from gi.repository import GstPbutils
@@ -309,10 +307,10 @@ class ProjectManager(Signallable, Loggable):
         and all sources
         """
         # write project file to temporary file
-        project_name = project.name if project.name else _("project")
+        project.props.name = project.props.name if project.props.name else _("project")
         asset = GES.Formatter.get_default()
         project_extension = asset.get_meta(GES.META_FORMATTER_EXTENSION)
-        tmp_name = "%s.%s" % (project_name, project_extension)
+        tmp_name = "%s.%s" % (project.props.name, project_extension)
 
         directory = os.path.dirname(uri)
         tmp_uri = os.path.join(directory, tmp_name)
@@ -325,7 +323,7 @@ class ProjectManager(Signallable, Loggable):
             # create tar file
             with tarfile.open(path_from_uri(uri), mode="w") as tar:
                 # top directory in tar-file
-                top = "%s-export" % project_name
+                top = "%s-export" % project.props.name
                 # add temporary project file
                 tar.add(path_from_uri(tmp_uri), os.path.join(top, tmp_name))
 
@@ -531,6 +529,22 @@ class Project(Loggable, GES.Project):
                                         GObject.TYPE_PYOBJECT,))
     }
 
+    __gproperties__ = {
+        "name": (str, "", "The name of the project", _("Unnamed project"), GObject.PARAM_READWRITE),
+        "description": (str, "Description", "Description of the project", _("No description given"), GObject.PARAM_READWRITE),
+        "author": (str, "Description", "Description of the project", GObject.PARAM_READWRITE),
+        "render-scale": (float, "Render scale", "Render scale", 0.0, GLib.MAXINT32, 1.0, GObject.PARAM_READWRITE),
+        "width": (int, "Width", "The width of the video", GObject.PARAM_READWRITE),
+        "height": (int, "Height", "The height of the video", GObject.PARAM_READWRITE),
+        "framerate": (Gst.Fraction, "Framerate", "The video framerate", GObject.PARAM_READWRITE),
+        "pixel-aspect-ratio": (Gst.Fraction, "Pixel aspect ratio", "The Pixel aspect ratio", GObject.PARAM_READWRITE),
+        "channels": (int, "Channels", "The number of audio channels", 0, GLib.MAXINT32, GObject.PARAM_READWRITE),
+        "rate": (int, "Rate", "The audio rate", 0, GLib.MAXINT32, GObject.PARAM_READWRITE),
+        "aencoder": (str, "AEncoder", "The name of the audio encoder", DEFAULT_AUDIO_ENCODER, GObject.PARAM_READWRITE),
+        "vencoder": (str, "VEncoder", "The name of the video encoder", DEFAULT_VIDEO_ENCODER, GObject.PARAM_READWRITE),
+        "muxer": (str, "Muxer", "The name of the muxer", DEFAULT_MUXER, GObject.PARAM_READWRITE),
+    }
+
     def __init__(self, name="", uri=None, **kwargs):
         """
         @param name: the name of the project
@@ -610,51 +624,101 @@ class Project(Loggable, GES.Project):
     # Our properties  #
     #-----------------#
 
-    # Project specific properties
-    @property
-    def name(self):
-        return self.get_meta("name")
+    def do_get_property(self, prop):
+        if prop.name in ["name", "description", "author", "render-scale",
+                         "year"]:
+            return self.get_meta(name)
+        elif prop.name in ["width", "height", "framerate",
+                           "pixel-aspect-ratio"]:
+            return self.video_profile.get_restriction()[0][prop.name]
+        elif prop.name in ["channels", "rate", ]:
+            try:
+                return int(self.audio_profile.get_restriction()[0]["rate"])
+            except TypeError:
+                self.info("Property not found on audio caps restriction: %s"
+                          % prop.name)
+                return None
+        elif prop.name in ["aencoder"]:
+            return self.audio_profile.get_preset_name()
+        elif prop.name in ["vencoder"]:
+            return self.video_profile.get_preset_name()
+        elif prop.name in ["muxer"]:
+            return self.container_profile.get_preset_name()
 
-    @name.setter
-    def name(self, name):
-        self.set_meta("name", name)
-        self.setModificationState(True)
+    def do_set_property(self, prop, value):
+        if prop.name in ["name", "description", "author",
+                         "render-scale", "year"]:
+            self.set_meta(prop.name, value)
+        elif prop.name in ["width", "height", "framerate",
+                           "pixel-aspect-ratio"]:
+            if self.video_profile.get_restriction()[0][prop.name] != value and \
+                    value is not None:
+                restriction = self.video_profile.get_restriction().copy_nth(0)
+                restriction[0][prop.name] = value
+                self.video_profile.set_restriction(restriction)
+                self._emitChange("rendering-settings-changed", prop.name, value)
 
-    @property
-    def year(self):
-        return self.get_meta("year")
+        elif prop.name in ["channels", "rate", ]:
+            if self.audio_profile.get_restriction()[0][prop.name] != value and value:
+                restriction = self.audio_profile.get_restriction().copy_nth(0)
+                restriction[0][prop.name] = value
+                self.audio_profile.set_restriction(restriction)
+                self._emitChange("rendering-settings-changed", prop.name, value)
 
-    @year.setter
-    def year(self, year):
-        self.set_meta("year", year)
-        self.setModificationState(True)
+        elif prop.name == " aencoder":
+            if self.audio_profile.get_preset_name() != value and value:
+                feature = Gst.Registry.get().lookup_feature(value)
+                if feature is None:
+                    self.error("%s not in registry", value)
+                else:
+                    for template in feature.get_static_pad_templates():
+                        if template.name_template == "src":
+                            audiotype = template.get_caps()[0].to_string()
+                            break
+                    self.audio_profile.set_format(Gst.Caps(audiotype))
+                self.audio_profile.set_preset_name(value)
 
-    @property
-    def description(self):
-        return self.get_meta("description")
+                self._emitChange("rendering-settings-changed", "aencoder", value)
 
-    @description.setter
-    def description(self, description):
-        self.set_meta("description", description)
-        self.setModificationState(True)
+        elif prop.name == " vencoder":
+            if self.video_profile.get_preset_name() != value and value:
+                feature = Gst.Registry.get().lookup_feature(value)
+                if feature is None:
+                    self.error("%s not in registry", value)
+                else:
+                    for template in feature.get_static_pad_templates():
+                        if template.name_template == "src":
+                            videotype = template.get_caps()[0].to_string()
+                            break
+                    self.video_profile.set_format(Gst.Caps(videotype))
 
-    @property
-    def author(self):
-        return self.get_meta("author")
+                self.video_profile.set_preset_name(value)
 
-    @author.setter
-    def author(self, author):
-        self.set_meta("author", author)
-        self.setModificationState(True)
+                self._emitChange("rendering-settings-changed", "vencoder", value)
+
+        elif prop.name == " muxer":
+            if self.container_profile.get_preset_name() != value and value:
+                feature = Gst.Registry.get().lookup_feature(value)
+                if feature is None:
+                    self.error("%s not in registry", value)
+                else:
+                    for template in feature.get_static_pad_templates():
+                        if template.name_template == "src":
+                            muxertype = template.get_caps()[0].to_string()
+                            break
+                    self.container_profile.set_format(Gst.Caps(muxertype))
+                self.container_profile.set_preset_name(value)
+
+                self._emitChange("rendering-settings-changed", "muxer", value)
 
     # Encoding related properties
     def set_rendering(self, rendering):
         if rendering and self._has_rendering_values != rendering:
-            self.videowidth = self.videowidth * self.render_scale / 100
-            self.videoheight = self.videoheight * self.render_scale / 100
+            self.props.width = self.props.width * self.render_scale / 100
+            self.props.height = self.props.height * self.render_scale / 100
         elif self._has_rendering_values != rendering:
-            self.videowidth = self.videowidth / self.render_scale * 100
-            self.videoheight = self.videoheight / self.render_scale * 100
+            self.props.width = self.props.width / self.render_scale * 100
+            self.props.height = self.props.height / self.render_scale * 100
         else:
             restriction = self.video_profile.get_restriction().copy_nth(0)
             self.video_profile.set_restriction(restriction)
@@ -662,149 +726,6 @@ class Project(Loggable, GES.Project):
             restriction = self.audio_profile.get_restriction().copy_nth(0)
             self.audio_profile.set_restriction(restriction)
         self._has_rendering_values = rendering
-
-    def set_video_restriction_value(self, name, value):
-        if self.video_profile.get_restriction()[0][name] != value and value:
-            restriction = self.video_profile.get_restriction().copy_nth(0)
-            restriction[0][name] = value
-            self.video_profile.set_restriction(restriction)
-            return True
-        return False
-
-    def set_audio_restriction_value(self, name, value):
-        if self.audio_profile.get_restriction()[0][name] != value and value:
-            restriction = self.audio_profile.get_restriction().copy_nth(0)
-            restriction[0][name] = value
-            self.audio_profile.set_restriction(restriction)
-            return True
-        return False
-
-    @property
-    def videowidth(self):
-        return self.video_profile.get_restriction()[0]["width"]
-
-    @videowidth.setter
-    def videowidth(self, value):
-        if self.set_video_restriction_value("width", int(value)):
-            self._emitChange("rendering-settings-changed", "width", value)
-
-    @property
-    def videoheight(self):
-        return self.video_profile.get_restriction()[0]["height"]
-
-    @videoheight.setter
-    def videoheight(self, value):
-        value = int(value)
-        if self.set_video_restriction_value("height", int(value)):
-            self._emitChange("rendering-settings-changed", "height", value)
-
-    @property
-    def videorate(self):
-        return self.video_profile.get_restriction()[0]["framerate"]
-
-    @videorate.setter
-    def videorate(self, value):
-        if self.set_video_restriction_value("framerate", value):
-            self._emitChange("rendering-settings-changed", "videorate", value)
-
-    @property
-    def videopar(self):
-        return self.video_profile.get_restriction()[0]["pixel-aspect-ratio"]
-
-    @videopar.setter
-    def videopar(self, value):
-        self.set_video_restriction_value("pixel-aspect-ratio", value)
-
-    @property
-    def audiochannels(self):
-        return self.audio_profile.get_restriction()[0]["channels"]
-
-    @audiochannels.setter
-    def audiochannels(self, value):
-        if self.set_audio_restriction_value("channels", value):
-            self._emitChange("rendering-settings-changed", "channels", value)
-
-    @property
-    def audiorate(self):
-        try:
-            return int(self.audio_profile.get_restriction()[0]["rate"])
-        except TypeError:
-            return None
-
-    @audiorate.setter
-    def audiorate(self, value):
-        if self.set_audio_restriction_value("rate", value):
-            self._emitChange("rendering-settings-changed", "rate", value)
-
-    @property
-    def aencoder(self):
-        return self.audio_profile.get_preset_name()
-
-    @aencoder.setter
-    def aencoder(self, value):
-        if self.audio_profile.get_preset_name() != value and value:
-            feature = Gst.Registry.get().lookup_feature(value)
-            if feature is None:
-                self.error("%s not in registry", value)
-            else:
-                for template in feature.get_static_pad_templates():
-                    if template.name_template == "src":
-                        audiotype = template.get_caps()[0].to_string()
-                        break
-                self.audio_profile.set_format(Gst.Caps(audiotype))
-            self.audio_profile.set_preset_name(value)
-
-            self._emitChange("rendering-settings-changed", "aencoder", value)
-
-    @property
-    def vencoder(self):
-        return self.video_profile.get_preset_name()
-
-    @vencoder.setter
-    def vencoder(self, value):
-        if self.video_profile.get_preset_name() != value and value:
-            feature = Gst.Registry.get().lookup_feature(value)
-            if feature is None:
-                self.error("%s not in registry", value)
-            else:
-                for template in feature.get_static_pad_templates():
-                    if template.name_template == "src":
-                        videotype = template.get_caps()[0].to_string()
-                        break
-                self.video_profile.set_format(Gst.Caps(videotype))
-
-            self.video_profile.set_preset_name(value)
-
-            self._emitChange("rendering-settings-changed", "vencoder", value)
-
-    @property
-    def muxer(self):
-        return self.container_profile.get_preset_name()
-
-    @muxer.setter
-    def muxer(self, value):
-        if self.container_profile.get_preset_name() != value and value:
-            feature = Gst.Registry.get().lookup_feature(value)
-            if feature is None:
-                self.error("%s not in registry", value)
-            else:
-                for template in feature.get_static_pad_templates():
-                    if template.name_template == "src":
-                        muxertype = template.get_caps()[0].to_string()
-                        break
-                self.container_profile.set_format(Gst.Caps(muxertype))
-            self.container_profile.set_preset_name(value)
-
-            self._emitChange("rendering-settings-changed", "muxer", value)
-
-    @property
-    def render_scale(self):
-        return self.get_meta("render-scale")
-
-    @render_scale.setter
-    def render_scale(self, value):
-        if value:
-            return self.set_meta("render-scale", value)
 
     #--------------------------------------------#
     # GES.Project virtual methods implementation #
@@ -884,9 +805,9 @@ class Project(Loggable, GES.Project):
 
     def update_restriction_caps(self):
         caps = Gst.Caps.new_empty_simple("video/x-raw")
-        caps.set_value("width", self.videowidth)
-        caps.set_value("height", self.videoheight)
-        caps.set_value("framerate", self.videorate)
+        caps.set_value("width", self.props.width)
+        caps.set_value("height", self.props.height)
+        caps.set_value("framerate", self.props.framerate)
         for track in self.timeline.get_tracks():
             if isinstance(track, GES.VideoTrack):
                 track.set_restriction_caps(caps)
@@ -920,7 +841,7 @@ class Project(Loggable, GES.Project):
         return self._dirty
 
     def getDAR(self):
-        return Gst.Fraction(self.videowidth, self.videoheight) * self.videopar
+        return Gst.Fraction(self.props.width, self.props.height) * self.props.pixel_aspect_ratio
 
     def getVideoWidthAndHeight(self, render=False):
         """ Returns the video width and height as a tuple
@@ -930,31 +851,31 @@ class Project(Loggable, GES.Project):
         """
         if render:
             if not self._has_rendering_values:
-                return (self.videowidth * self.render_scale / 100,
-                        self.videoheight * self.render_scale / 100)
+                return (self.props.width * self.render_scale / 100,
+                        self.props.height * self.render_scale / 100)
             else:
-                return self.videowidth, self.videoheight
+                return self.props.width, self.props.height
 
         if self._has_rendering_values:
-            return (self.videowidth / self.render_scale * 100,
-                    self.videoheight / self.render_scale * 100)
+            return (self.props.width / self.render_scale * 100,
+                    self.props.height / self.render_scale * 100)
 
-        return self.videowidth, self.videoheight
+        return self.props.width, self.props.height
 
     def getVideoCaps(self, render=False):
         """ Returns the GstCaps corresponding to the video settings """
         videowidth, videoheight = self.getVideoWidthAndHeight(render=render)
         vstr = "width=%d,height=%d,pixel-aspect-ratio=%d/%d,framerate=%d/%d" % (
             videowidth, videoheight,
-            self.videopar.num, self.videopar.denom,
-            self.videorate.num, self.videorate.denom)
+            self.props.pixel_aspect_ratio.num, self.props.pixel_aspect_ratio.denom,
+            self.props.framerate.num, self.props.framerate.denom)
         caps_str = "video/x-raw,%s" % (vstr)
         video_caps = Gst.caps_from_string(caps_str)
         return video_caps
 
     def getAudioCaps(self):
         """ Returns the GstCaps corresponding to the audio settings """
-        astr = "rate=%d,channels=%d" % (self.audiorate, self.audiochannels)
+        astr = "rate=%d,channels=%d" % (self.props.rate, self.props.channels)
         caps_str = "audio/x-raw,%s" % (astr)
         audio_caps = Gst.caps_from_string(caps_str)
         return audio_caps
@@ -964,10 +885,10 @@ class Project(Loggable, GES.Project):
         Set the number of audio channels and the rate
         """
         self.info("%d x %dHz %dbits", nbchanns, rate)
-        if not nbchanns == -1 and not nbchanns == self.audiochannels:
-            self.audiochannels = nbchanns
-        if not rate == -1 and not rate == self.audiorate:
-            self.audiorate = rate
+        if not nbchanns == -1 and not nbchanns == self.props.channels:
+            self.props.channels = nbchanns
+        if not rate == -1 and not rate == self.props.rate:
+            self.props.rate = rate
 
     def setEncoders(self, muxer="", vencoder="", aencoder=""):
         """ Set the video/audio encoder and muxer """
@@ -1027,20 +948,20 @@ class Project(Loggable, GES.Project):
             self.timeline.append_layer()
 
     def _ensureVideoRestrictions(self):
-        if not self.videowidth:
-            self.videowidth = 720
-        if not self.videoheight:
-            self.videoheight = 576
-        if not self.videorate:
-            self.videorate = Gst.Fraction(25, 1)
-        if not self.videopar:
-            self.videopar = Gst.Fraction(16, 15)
+        if not self.props.width:
+            self.props.width = 720
+        if not self.props.height:
+            self.props.height = 576
+        if not self.props.framerate:
+            self.props.framerate = Gst.Fraction(25, 1)
+        if not self.props.pixel_aspect_ratio:
+            self.props.pixel_aspect_ratio = Gst.Fraction(16, 15)
 
     def _ensureAudioRestrictions(self):
-        if not self.audiochannels:
-            self.audiochannels = 2
-        if not self.audiorate:
-            self.audiorate = 44100
+        if not self.props.channels:
+            self.props.channels = 2
+        if not self.props.rate:
+            self.props.rate = 44100
 
     def _emitChange(self, signal, key=None, value=None):
         if key and value:
@@ -1530,16 +1451,16 @@ class ProjectSettingsDialog():
         self._selectDarRadiobuttonToggledCb(self.select_dar_radiobutton)
 
         # metadata
-        self.title_entry.set_text(self.project.name)
+        self.title_entry.set_text(self.project.props.name)
         self.author_entry.set_text(self.project.author)
-        if self.project.year:
-            year = int(self.project.year)
+        if self.project.props.year:
+            year = int(self.project.props.year)
         else:
             year = datetime.now().year
         self.year_spinbutton.get_adjustment().set_value(year)
 
     def updateMetadata(self):
-        self.project.name = self.title_entry.get_text()
+        self.project.props.name = self.title_entry.get_text()
         self.project.author = self.author_entry.get_text()
         self.project.year = str(self.year_spinbutton.get_value_as_int())
 

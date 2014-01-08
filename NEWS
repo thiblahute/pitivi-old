@@ -103,7 +103,7 @@
  * UI beautifications
  * Switch to themeable ruler
  * Speed optimisations
- * Show the project name in the window title
+ * Show the project.props.name in the window title
 
 2009 August 13 - PiTiVi 0.13.2
 

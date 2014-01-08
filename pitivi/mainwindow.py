@@ -1190,10 +1190,10 @@ class PitiviMainWindow(Gtk.Window, Loggable):
         """
         When the project setting change, we reset the viewer aspect ratio
         """
-        ratio = float(project.videopar.num / project.videopar.denom *
-                      project.videowidth) / float(project.videoheight)
+        ratio = float(project.props.pixel_aspect_ratio.num / project.props.pixel_aspect_ratio.denom *
+                      project.props.width) / float(project.props.height)
         self.viewer.setDisplayAspectRatio(ratio)
-        self.viewer.timecode_entry.setFramerate(project.videorate)
+        self.viewer.timecode_entry.setFramerate(project.props.framerate)
 
     def _sourceListMissingPluginsCb(self, project, uri, factory,
             details, descriptions, missingPluginsCallback):
@@ -1220,10 +1220,10 @@ class PitiviMainWindow(Gtk.Window, Loggable):
         asset = GES.Formatter.get_default()
         asset_extension = asset.get_meta(GES.META_FORMATTER_EXTENSION)
 
-        if not project.name:
+        if not project.props.name:
             chooser.set_current_name(_("Untitled") + "." + asset_extension + "_tar")
         else:
-            chooser.set_current_name(project.name + "." + asset_extension + "_tar")
+            chooser.set_current_name(project.props.name + "." + asset_extension + "_tar")
 
         filt = Gtk.FileFilter()
         filt.set_name(_("Tar archive"))
@@ -1348,8 +1348,8 @@ class PitiviMainWindow(Gtk.Window, Loggable):
     def updateTitle(self):
         name = touched = ""
         if self.app.current_project:
-            if self.app.current_project.name:
-                name = self.app.current_project.name
+            if self.app.current_project.props.name:
+                name = self.app.current_project.props.name
             else:
                 name = _("Untitled")
             if self.app.current_project.hasUnsavedModifications():

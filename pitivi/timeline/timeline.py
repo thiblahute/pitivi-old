@@ -1372,11 +1372,11 @@ class Timeline(Gtk.VBox, Zoomable, Loggable):
         we are interested in.
 
         if @item is None, it mean we called it ourself, and want to force
-        getting the project videorate value
+        getting the project.props.framerate value
         """
         if item == "videorate" or item is None:
             if value is None:
-                value = project.videorate
+                value = project.props.framerate
             self._framerate = value
 
             self.ruler.setProjectFrameRate(self._framerate)
@@ -1397,7 +1397,7 @@ class Timeline(Gtk.VBox, Zoomable, Loggable):
             self._seeker = self._project.seeker
             self.timeline.setPipeline(self._project.pipeline)
 
-            self.ruler.setProjectFrameRate(self._project.videorate)
+            self.ruler.setProjectFrameRate(self._project.props.framerate)
             self.ruler.zoomChanged()
 
             self._renderingSettingsChangedCb(self._project, None, None)

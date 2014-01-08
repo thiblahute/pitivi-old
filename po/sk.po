@@ -1543,7 +1543,7 @@ msgstr "Bez_názvu.xptv"
 msgid "Detect Automatically"
 msgstr "Rozpoznať automaticky"
 
-# project name
+# project.props.name
 #: ../pitivi/ui/mainwindow.py:1120
 msgid "Untitled project"
 msgstr "Projekt bez názvu"

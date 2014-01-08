@@ -346,16 +346,16 @@ class RenderDialog(Loggable):
 
         # Directory and Filename
         self.filebutton.set_current_folder(self.app.settings.lastExportFolder)
-        if not self.project.name:
+        if not self.project.props.name:
             self.updateFilename(_("Untitled"))
         else:
-            self.updateFilename(self.project.name)
+            self.updateFilename(self.project.props.name)
 
         # We store these so that when the user tries various container formats,
         # (AKA muxers) we select these a/v encoders, if they are compatible with
         # the current container format.
-        self.preferred_vencoder = self.project.vencoder
-        self.preferred_aencoder = self.project.aencoder
+        self.preferred_vencoder = self.project.props.vencoder
+        self.preferred_aencoder = self.project.props.aencoder
 
         self._initializeComboboxModels()
         self._displaySettings()
@@ -413,8 +413,8 @@ class RenderDialog(Loggable):
             "frame-rate": Gst.Fraction(
                 int(get_combo_value(self.frame_rate_combo).num),
                 int(get_combo_value(self.frame_rate_combo).denom)),
-            "height": self.project.videoheight,
-            "width": self.project.videowidth})
+            "height": self.project.props.height,
+            "width": self.project.props.width})
 
     def bindCombo(self, mgr, name, widget):
         if name == "container":
@@ -464,7 +464,7 @@ class RenderDialog(Loggable):
 
     def acodec_setter(self, widget, value):
         set_combo_value(widget, Gst.ElementFactory.find(value))
-        self.project.aencoder = value
+        self.project.props.aencoder = value
         if not self.muxer_combo_changing:
             # The user directly changed the audio encoder combo.
             self.preferred_aencoder = value
@@ -477,13 +477,13 @@ class RenderDialog(Loggable):
             self.preferred_vencoder = value
 
     def sample_rate_setter(self, widget, value):
-        self.project.audiorate = set_combo_value(widget, value)
+        self.project.props.rate = set_combo_value(widget, value)
 
     def channels_setter(self, widget, value):
-        self.project.audiochannels = set_combo_value(widget, value)
+        self.project.props.channels = set_combo_value(widget, value)
 
     def framerate_setter(self, widget, value):
-        self.project.videorate = set_combo_value(widget, value)
+        self.project.props.framerate = set_combo_value(widget, value)
 
     def bindHeight(self, mgr):
         mgr.bindWidget("height",
@@ -677,21 +677,21 @@ class RenderDialog(Loggable):
         """Display the settings that also change in the ProjectSettingsDialog.
         """
         # Video settings
-        set_combo_value(self.frame_rate_combo, self.project.videorate)
+        set_combo_value(self.frame_rate_combo, self.project.props.framerate)
         # Audio settings
-        set_combo_value(self.channels_combo, self.project.audiochannels)
-        set_combo_value(self.sample_rate_combo, self.project.audiorate)
+        set_combo_value(self.channels_combo, self.project.props.channels)
+        set_combo_value(self.sample_rate_combo, self.project.props.rate)
 
     def _displayRenderSettings(self):
         """Display the settings which can be changed only in the RenderDialog.
         """
         # Video settings
         # note: this will trigger an update of the video resolution label
-        self.scale_spinbutton.set_value(self.project.render_scale)
+        self.scale_spinbutton.set_value(self.project.props.render_scale)
         # Muxer settings
         # note: this will trigger an update of the codec comboboxes
         set_combo_value(self.muxercombobox,
-            Gst.ElementFactory.find(self.project.muxer))
+            Gst.ElementFactory.find(self.project.props.muxer))
 
     def _checkForExistingFile(self, *args):
         """
@@ -743,7 +743,7 @@ class RenderDialog(Loggable):
 
     def updateFilename(self, basename):
         """Updates the filename UI element to show the specified file name."""
-        extension = extension_for_muxer(self.project.muxer)
+        extension = extension_for_muxer(self.project.props.muxer)
         if extension:
             name = "%s%s%s" % (basename, os.path.extsep, extension)
         else:
@@ -753,10 +753,10 @@ class RenderDialog(Loggable):
     def updateAvailableEncoders(self):
         """Update the encoder comboboxes to show the available encoders."""
         encoders = CachedEncoderList()
-        vencoder_model = factorylist(encoders.video_combination[self.project.muxer])
+        vencoder_model = factorylist(encoders.video_combination[self.project.props.muxer])
         self.video_encoder_combo.set_model(vencoder_model)
 
-        aencoder_model = factorylist(encoders.audio_combination[self.project.muxer])
+        aencoder_model = factorylist(encoders.audio_combination[self.project.props.muxer])
         self.audio_encoder_combo.set_model(aencoder_model)
 
         self._updateEncoderCombo(self.video_encoder_combo, self.preferred_vencoder)
@@ -883,14 +883,14 @@ class RenderDialog(Loggable):
         self.progress = RenderingProgressDialog(self.app, self)
         self.window.hide()  # Hide the rendering settings dialog while rendering
 
-        encoder_string = self.project.vencoder
+        encoder_string = self.project.props.vencoder
         try:
             fmt = self._factory_formats[encoder_string]
             self.project.video_profile.get_restriction()[0]["format"] = fmt
         except KeyError:
             # Now find a format to set on the restriction caps.
             # The reason is we can't send different formats on the encoders.
-            factory = Gst.ElementFactory.find(self.project.vencoder)
+            factory = Gst.ElementFactory.find(self.project.props.vencoder)
             for struct in factory.get_static_pad_templates():
                 if struct.direction == Gst.PadDirection.SINK:
                     caps = Gst.Caps.from_string(struct.get_caps().to_string())
@@ -1038,7 +1038,7 @@ class RenderDialog(Loggable):
     #-- Settings changed callbacks
     def _scaleSpinbuttonChangedCb(self, button):
         render_scale = self.scale_spinbutton.get_value()
-        self.project.render_scale = render_scale
+        self.project.props.render_scale = render_scale
         self.updateResolution()
 
     def updateResolution(self):
@@ -1088,7 +1088,7 @@ class RenderDialog(Loggable):
 
     def _videoEncoderComboChangedCb(self, combo):
         vencoder = get_combo_value(combo).get_name()
-        self.project.vencoder = vencoder
+        self.project.props.vencoder = vencoder
 
         if not self.muxer_combo_changing:
             # The user directly changed the video encoder combo.
@@ -1099,14 +1099,14 @@ class RenderDialog(Loggable):
         self._elementSettingsDialog(factory, 'vcodecsettings')
 
     def _channelsComboChangedCb(self, combo):
-        self.project.audiochannels = get_combo_value(combo)
+        self.project.props.channels = get_combo_value(combo)
 
     def _sampleRateComboChangedCb(self, combo):
-        self.project.audiorate = get_combo_value(combo)
+        self.project.props.rate = get_combo_value(combo)
 
     def _audioEncoderChangedComboCb(self, combo):
         aencoder = get_combo_value(combo).get_name()
-        self.project.aencoder = aencoder
+        self.project.props.aencoder = aencoder
         if not self.muxer_combo_changing:
             # The user directly changed the audio encoder combo.
             self.preferred_aencoder = aencoder
@@ -1117,7 +1117,7 @@ class RenderDialog(Loggable):
 
     def _muxerComboChangedCb(self, muxer_combo):
         """Handle the changing of the container format combobox."""
-        self.project.muxer = get_combo_value(muxer_combo).get_name()
+        self.project.props.muxer = get_combo_value(muxer_combo).get_name()
 
         # Update the extension of the filename.
         basename = os.path.splitext(self.fileentry.get_text())[0]
