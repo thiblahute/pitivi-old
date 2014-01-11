@@ -709,6 +709,7 @@ class Project(Loggable, GES.Project):
     @videopar.setter
     def videopar(self, value):
         self.set_video_restriction_value("pixel-aspect-ratio", value)
+        self._emitChange("rendering-settings-changed", "pixel-aspect-ratio", value)
 
     @property
     def aspect_ratio(self):
