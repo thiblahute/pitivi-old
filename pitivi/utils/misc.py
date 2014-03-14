@@ -27,8 +27,8 @@ from gi.repository import GLib
 from gi.repository import GObject
 from gi.repository import Gst
 from gi.repository import Gtk
-from urllib import unquote
-from urlparse import urlsplit, urlparse
+from urllib.parse import unquote
+from urllib.parse import urlsplit, urlparse
 import bisect
 import hashlib
 import os
@@ -260,8 +260,8 @@ def element_make_many(*args):
 
 
 def pipeline(graph):
-    E = graph.iteritems()
-    V = graph.iterkeys()
+    E = iter(graph.items())
+    V = iter(graph.keys())
     p = Gst.Pipeline()
     p.add(*V)
     for u, v in E:
@@ -385,7 +385,7 @@ def argmax(func, seq):
 
 def same(seq):
     i = iter(seq)
-    first = i.next()
+    first = next(i)
     for item in i:
         if first != item:
             return None
@@ -409,7 +409,7 @@ def show_user_manual(page=None):
         try:
             Gtk.show_uri(None, uri, time_now)
             return
-        except Exception, e:
+        except Exception as e:
             log.debug("utils", "Failed loading URI %s: %s", uri, e)
             continue
     log.warning("utils", "Failed loading URIs")
