@@ -39,10 +39,10 @@ AS_AC_EXPAND(LOCALSTATEDIR, $localstatedir)
 AC_MSG_NOTICE(Using localstatedir $LOCALSTATEDIR)
 
 dnl python checks (you can change the required python version bellow)
-AM_PATH_PYTHON(2.7.0)
-PY_PREFIX=`$PYTHON -c 'import sys ; print sys.prefix'`
-PYTHON_LIBS="-lpython$PYTHON_VERSION"
-PYTHON_CFLAGS="-I$PY_PREFIX/include/python$PYTHON_VERSION"
+AM_PATH_PYTHON(3.4.0)
+PY_PREFIX=`$PYTHON -c 'import sys ; print (sys.prefix)'`
+PYTHON_LIBS="-lpython{$PYTHON_VERSION}m"
+PYTHON_CFLAGS="-I$PY_PREFIX/include/python${PYTHON_VERSION}m"
 AC_SUBST([PYTHON_LIBS])
 AC_SUBST([PYTHON_CFLAGS])
 
