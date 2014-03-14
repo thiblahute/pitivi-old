@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PYTHON=python2
+export PYTHON=python3
 
 DIE=0
 package=pitivi
