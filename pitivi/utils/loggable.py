@@ -180,35 +180,35 @@ class TerminalController:
         # Look up string capabilities.
         for capability in self._STRING_CAPABILITIES:
             (attrib, cap_name) = capability.split('=')
-            setattr(self, attrib, self._tigetstr(cap_name) or '')
+            setattr(self, attrib, self._tigetstr(cap_name) or b'')
 
         # Colors
         set_fg = self._tigetstr('setf')
         if set_fg:
             for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
-                setattr(self, color, curses.tparm(set_fg, i) or '')
+                setattr(self, color, curses.tparm(set_fg, i) or b'')
         set_fg_ansi = self._tigetstr('setaf')
         if set_fg_ansi:
             for i, color in zip(list(range(len(self._ANSICOLORS))),
                                 self._ANSICOLORS):
-                setattr(self, color, curses.tparm(set_fg_ansi, i) or '')
+                setattr(self, color, curses.tparm(set_fg_ansi, i) or b'')
         set_bg = self._tigetstr('setb')
         if set_bg:
             for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
-                setattr(self, 'BG_' + color, curses.tparm(set_bg, i) or '')
+                setattr(self, 'BG_' + color, curses.tparm(set_bg, i) or b'')
         set_bg_ansi = self._tigetstr('setab')
         if set_bg_ansi:
             for i, color in zip(list(range(len(self._ANSICOLORS))),
                                 self._ANSICOLORS):
-                setattr(self, 'BG_' + color, curses.tparm(set_bg_ansi, i) or '')
+                setattr(self, 'BG_' + color, curses.tparm(set_bg_ansi, i) or b'')
 
     def _tigetstr(self, cap_name):
         # String capabilities can include "delays" of the form "$<2>".
         # For any modern terminal, we should be able to just ignore
         # these, so strip them out.
         import curses
-        cap = curses.tigetstr(cap_name) or ''
-        return re.sub(r'\$<\d+>[/*]?', '', cap)
+        cap = curses.tigetstr(cap_name) or b''
+        return re.sub(r'\$<\d+>[/*]?', '', cap.decode()).encode()
 
     def render(self, template):
         """
@@ -645,15 +645,26 @@ def stderrHandler(level, object, category, file, line, message):
     sys.stderr.flush()
 
 
-def _preformatLevels(enableColorOutput):
+def logLevelName(level):
     format = '%-5s'
+    return format % (_LEVEL_NAMES[level - 1], )
+
+
+def _preformatLevels(enableColorOutput):
 
     if enableColorOutput:
         t = TerminalController()
-        formatter = lambda level: ''.join((t.BOLD, getattr(t, COLORS[level]),
-                            format % (_LEVEL_NAMES[level - 1], ), t.NORMAL))
+
+        if type(t.BOLD) == bytes:
+            formatter = lambda level: ''.join(
+                (t.BOLD.decode(), getattr(t, COLORS[level]).decode(),
+                logLevelName(level), t.NORMAL.decode()))
+        else:
+            formatter = lambda level: ''.join(
+                (t.BOLD, getattr(t, COLORS[level]),
+                logLevelName(level), t.NORMAL))
     else:
-        formatter = lambda level: format % (_LEVEL_NAMES[level - 1], )
+        formatter = lambda level: logLevelName(level)
 
     for level in ERROR, WARN, FIXME, INFO, DEBUG, LOG:
         _FORMATTED_LEVELS.append(formatter(level))
