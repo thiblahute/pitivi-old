@@ -104,7 +104,7 @@ class TestPresetBasics(TestCase):
     def testAddPresetWithNonAsciiName(self):
         unicode_name = "ソリッド・スネーク"
         self.manager.addPreset(unicode_name, {})
-        self.assertTrue(unicode_name.encode("utf-8") in self.manager.getPresetNames())
+        self.assertTrue(unicode_name in self.manager.getPresetNames())
 
     def testRenamePreset(self):
         self.manager.addPreset('preseT onE', {'name1': '1A'})

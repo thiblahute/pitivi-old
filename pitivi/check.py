@@ -88,7 +88,7 @@ class Dependency(object):
         """
         raise NotImplementedError
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self.satisfied
 
     def __repr__(self):
