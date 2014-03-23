@@ -578,7 +578,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
             # $HOME/.cache/thumbnails will be used."
             # Older version of the spec also mentioned $HOME/.thumbnails
             quoted_uri = quote_uri(info.get_uri())
-            thumbnail_hash = md5(quoted_uri).hexdigest()
+            thumbnail_hash = md5(quoted_uri.encode()).hexdigest()
             try:
                 thumb_dir = os.environ['XDG_CACHE_HOME']
                 thumb_64, thumb_128 = self._getThumbnailInDir(thumb_dir, thumbnail_hash)

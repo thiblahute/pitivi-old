@@ -79,7 +79,7 @@ def _add_pitivi_path():
     # prepend any directories found at configure time if they're not
     # already in the path. (if they are already in the path, the user
     # chose to have it that way, so we leave their order)
-    for path in string.split(CONFIGURED_PYTHONPATH, ':'):
+    for path in CONFIGURED_PYTHONPATH.split(':'):
         if path not in sys.path:
             sys.path.insert(0, path)
 
