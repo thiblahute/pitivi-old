@@ -328,10 +328,10 @@ def beautify_length(length):
     Converts the given time in nanoseconds to a human readable string
     """
     sec = length / Gst.SECOND
-    mins = sec / 60
-    sec = sec % 60
-    hours = mins / 60
-    mins = mins % 60
+    mins = int(sec / 60)
+    sec = int(sec % 60)
+    hours = int(mins / 60)
+    mins = int(mins % 60)
 
     parts = []
     if hours:
