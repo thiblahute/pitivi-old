@@ -86,6 +86,11 @@ class AssetAddedAction(UndoableAction):
     def do(self):
         self.project.add_asset(self.asset)
 
+    def serializeLastAction(self):
+        st = Gst.Structure.new_empty("add-asset")
+        st.set_value("uri", self.asset.get_info().get_uri())
+        return st.to_string()
+
 
 class ProjectSettingsChanged(UndoableAction):
 
