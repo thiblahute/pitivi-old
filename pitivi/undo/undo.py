@@ -155,6 +155,14 @@ class UndoableActionLog(GObject.Object, Loggable):
 
     def push(self, action):
         self.debug("Pushing %s", action)
+
+        try:
+            last_log_string = action.serializeLastAction() + "\n"
+            self.log_file.write(last_log_string)
+            self.log_file.flush()
+        except NotImplementedError:
+            self.warning("No serialization method for that action")
+
         if self.running:
             self.debug("Abort because already running")
             return
@@ -167,12 +175,6 @@ class UndoableActionLog(GObject.Object, Loggable):
         stack.push(action)
         self.debug("push action %s in action group %s", action, stack.action_group_name)
         self.emit("push", stack, action)
-        try:
-            last_log_string = action.serializeLastAction() + "\n"
-            self.log_file.write(last_log_string)
-            self.log_file.flush()
-        except NotImplementedError:
-            self.warning("No serialization method for that action")
 
     def rollback(self):
         self.debug("Rolling back")
