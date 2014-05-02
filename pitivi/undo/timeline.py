@@ -130,6 +130,12 @@ class ClipAdded(UndoableAction):
         self.layer.remove_clip(self.clip)
         self._undone()
 
+    def serializeLastAction(self):
+        st = Gst.Structure.new_empty("add-clip")
+        st.set_value("name", self.clip.get_name())
+        st.set_value("layer-priority", self.layer.props.priority)
+        return st.to_string()
+
 
 class ClipRemoved(UndoableAction):
 
@@ -146,6 +152,11 @@ class ClipRemoved(UndoableAction):
         self.layer.add_clip(self.clip)
         self.layer.get_timeline().commit()
         self._undone()
+
+    def serializeLastAction(self):
+        st = Gst.Structure.new_empty("remove-clip")
+        st.set_value("name", self.clip.get_name())
+        return st.to_string()
 
 
 class LayerAdded(UndoableAction):
