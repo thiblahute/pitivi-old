@@ -19,6 +19,7 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+from gi.repository import Gst
 from gi.repository import GES
 from gi.repository import GObject
 
@@ -158,6 +159,11 @@ class LayerAdded(UndoableAction):
     def undo(self):
         self.timeline.remove_layer(self.layer)
 
+    def serializeLastAction(self):
+        st = Gst.Structure.new_empty("add-layer")
+        st.set_value("priority", self.layer.props.priority)
+        return st.to_string()
+
 
 class LayerRemoved(UndoableAction):
     def __init__(self, timeline, layer):
@@ -169,6 +175,11 @@ class LayerRemoved(UndoableAction):
 
     def undo(self):
         self.timeline.add_layer(self.layer)
+
+    def serializeLastAction(self):
+        st = Gst.Structure.new_empty("remove-layer")
+        st.set_value("priority", self.layer.props.priority)
+        return st.to_string()
 
 
 class InterpolatorKeyframeAdded(UndoableAction):
