@@ -23,6 +23,8 @@
 Base classes for undo/redo.
 """
 
+import weakref
+
 from gi.repository import GObject
 
 from pitivi.utils.loggable import Loggable
@@ -130,16 +132,16 @@ class UndoableActionLog(GObject.Object, Loggable):
         "cleaned": (GObject.SIGNAL_RUN_LAST, None, ()),
     }
 
-    def __init__(self):
+    def __init__(self, app=None):
         GObject.Object.__init__(self)
         Loggable.__init__(self)
 
+        self.app = weakref.proxy(app)
         self.undo_stacks = []
         self.redo_stacks = []
         self.stacks = []
         self.running = False
         self._checkpoint = self._takeSnapshot()
-        self.log_file = open("/home/meh/Documents/mylog.txt", "w")
 
     def begin(self, action_group_name):
         self.debug("Beginning %s", action_group_name)
@@ -157,9 +159,9 @@ class UndoableActionLog(GObject.Object, Loggable):
         self.debug("Pushing %s", action)
 
         try:
-            last_log_string = action.serializeLastAction() + "\n"
-            self.log_file.write(last_log_string)
-            self.log_file.flush()
+            st = action.serializeLastAction()
+            if self.app is not None:
+                self.app.write_action(st)
         except NotImplementedError:
             self.warning("No serialization method for that action")
 
@@ -272,11 +274,6 @@ class UndoableActionLog(GObject.Object, Loggable):
 
     def _stackIsNested(self, unused_stack):
         return bool(len(self.stacks))
-
-    def __del__(self):
-        # FIXME : This is never called for now, but __del__ is the correct place
-        # to dispose of resources created in __init__
-        self.log_file.close()
 
 
 class PropertyChangeTracker(GObject.Object):

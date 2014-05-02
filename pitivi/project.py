@@ -78,7 +78,7 @@ class AssetRemovedAction(UndoableAction):
         st.set_value("id", self.asset.get_info().get_uri())
         type_string = GObject.type_name(self.asset.get_extractable_type())
         st.set_value("type", type_string)
-        return st.to_string()
+        return st
 
 
 class AssetAddedAction(UndoableAction):
@@ -98,7 +98,7 @@ class AssetAddedAction(UndoableAction):
         st.set_value("id", self.asset.get_info().get_uri())
         type_string = GObject.type_name(self.asset.get_extractable_type())
         st.set_value("type", type_string)
-        return st.to_string()
+        return st
 
 
 class ProjectSettingsChanged(UndoableAction):
@@ -947,7 +947,7 @@ class Project(Loggable, GES.Project):
             self.timeline.props.auto_transition = True
         self._calculateNbLoadingAssets()
 
-        self.pipeline = Pipeline()
+        self.pipeline = Pipeline(self.app)
         try:
             self.pipeline.set_timeline(self.timeline)
         except PipelineError as e:

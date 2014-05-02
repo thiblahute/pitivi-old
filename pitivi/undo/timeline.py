@@ -134,7 +134,9 @@ class ClipAdded(UndoableAction):
         st = Gst.Structure.new_empty("add-clip")
         st.set_value("name", self.clip.get_name())
         st.set_value("layer-priority", self.layer.props.priority)
-        return st.to_string()
+        st.set_value("asset-id", self.clip.get_asset().get_id())
+        st.set_value("type", GObject.type_name(self.clip))
+        return st
 
 
 class ClipRemoved(UndoableAction):
@@ -156,7 +158,7 @@ class ClipRemoved(UndoableAction):
     def serializeLastAction(self):
         st = Gst.Structure.new_empty("remove-clip")
         st.set_value("name", self.clip.get_name())
-        return st.to_string()
+        return st
 
 
 class LayerAdded(UndoableAction):
@@ -173,7 +175,7 @@ class LayerAdded(UndoableAction):
     def serializeLastAction(self):
         st = Gst.Structure.new_empty("add-layer")
         st.set_value("priority", self.layer.props.priority)
-        return st.to_string()
+        return st
 
 
 class LayerRemoved(UndoableAction):
@@ -190,7 +192,7 @@ class LayerRemoved(UndoableAction):
     def serializeLastAction(self):
         st = Gst.Structure.new_empty("remove-layer")
         st.set_value("priority", self.layer.props.priority)
-        return st.to_string()
+        return st
 
 
 class InterpolatorKeyframeAdded(UndoableAction):

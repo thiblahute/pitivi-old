@@ -72,9 +72,11 @@ class Pitivi(Gtk.Application, Loggable):
         self.system = None
         self.project_manager = ProjectManager(self)
 
-        self.action_log = UndoableActionLog()
+        self.action_log = UndoableActionLog(self)
         self.timeline_log_observer = None
         self.project_log_observer = None
+
+        self.log_file = open("/home/meh/Documents/mylog.txt", "w")
 
         self.gui = None
         self.welcome_wizard = None
@@ -84,6 +86,10 @@ class Pitivi(Gtk.Application, Loggable):
         self.connect("startup", self._startupCb)
         self.connect("activate", self._activateCb)
         self.connect("open", self.openCb)
+
+    def write_action(self, structure):
+        self.log_file.write(structure.to_string() + "\r\n")
+        self.log_file.flush()
 
     def _startupCb(self, unused_app):
         # Init logging as early as possible so we can log startup code
@@ -183,6 +189,7 @@ class Pitivi(Gtk.Application, Loggable):
             self.gui.destroy()
         self.threads.stopAllThreads()
         self.settings.storeSettings()
+        self.log_file.close()
         self.quit()
         return True
 
