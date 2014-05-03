@@ -20,9 +20,9 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+from gi.repository import Gst
 from gi.repository import GES
 from gi.repository import GObject
-from gi.repository import Gst
 
 
 # Selection modes
