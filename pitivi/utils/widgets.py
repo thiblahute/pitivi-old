@@ -267,7 +267,7 @@ class NumericWidget(Gtk.HBox, DynamicWidget):
 
         self._type = type(value)
 
-        if self._type == int or self._type == long:
+        if self._type == int:
             minimum, maximum = (-sys.maxsize, sys.maxsize)
             step = 1.0
             page = 10.0
@@ -402,7 +402,7 @@ class FractionWidget(TextWidget, DynamicWidget):
     def setWidgetValue(self, value):
         # With introspection, we get tuples for GESTrackElement children props
         if type(value) is tuple:
-            print "fraction widget tuple:", value
+            self.debug("fraction widget tuple:", value)
             value = value[-1]  # Grab the last item of the tuple
 
         if type(value) is str:
@@ -902,9 +902,9 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
     def _getProperties(self):
         if isinstance(self.element, GES.BaseEffect):
             is_effect = True
-            return [prop for prop in self.element.list_children_properties() if not prop.name in self.ignore]
+            return [prop for prop in self.element.list_children_properties() if prop.name not in self.ignore]
         else:
-            return [prop for prop in GObject.list_properties(self.element) if not prop.name in self.ignore]
+            return [prop for prop in GObject.list_properties(self.element) if prop.name not in self.ignore]
 
     def _addWidgets(self, properties, default_btn, use_element_props):
         """
@@ -961,12 +961,12 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
             widget = self._makePropertyWidget(prop, prop_value)
             if isinstance(widget, ToggleWidget):
                 widget.set_label(prop.nick)
-                table.attach(widget, 0, 2, y, y + 1, yoptions=FILL)
+                table.attach(widget, 0, 2, y, y + 1, yoptions=Gtk.AttachOptions.FILL)
             else:
                 label = Gtk.Label(label=prop.nick + ":")
                 label.set_alignment(0.0, 0.5)
-                table.attach(label, 0, 1, y, y + 1, xoptions=FILL, yoptions=FILL)
-                table.attach(widget, 1, 2, y, y + 1, yoptions=FILL)
+                table.attach(label, 0, 1, y, y + 1, xoptions=Gtk.AttachOptions.FILL, yoptions=Gtk.AttachOptions.FILL)
+                table.attach(widget, 1, 2, y, y + 1, yoptions=Gtk.AttachOptions.FILL)
 
             if not isinstance(widget, ToggleWidget) and not isinstance(widget, ChoiceWidget) and self.isControllable:
                 button = self._getKeyframeToggleButton(prop)
@@ -984,7 +984,7 @@ class GstElementSettingsWidget(Gtk.VBox, Loggable):
                     if binding:
                         widget.set_sensitive(False)
                         self.bindings[widget] = binding
-                to_default_btn = self.getResetToDefaultValueButton(prop, widget)
+                to_default_btn = self._getResetToDefaultValueButton(prop, widget)
                 table.attach(to_default_btn, 2, 3, y, y + 1,
                              xoptions=Gtk.AttachOptions.FILL,
                              yoptions=Gtk.AttachOptions.FILL)

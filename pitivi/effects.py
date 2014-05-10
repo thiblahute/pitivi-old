@@ -58,15 +58,15 @@ from pitivi.utils.ui import SPACING, TYPE_PITIVI_EFFECT
 from pitivi.utils.widgets import GstElementSettingsWidget, FractionWidget
 
 
-#------------- Helper to handle effect in the backend ---------------------------#
+# ------------- Helper to handle effect in the backend ---------------------------#
 (VIDEO_EFFECT, AUDIO_EFFECT) = list(range(1, 3))
 
 BLACKLISTED_EFFECTS = ["colorconvert", "coglogoinsert", "festival",
                        "alphacolor", "cogcolorspace", "videodetect",
                        "navigationtest", "videoanalyse"]
 
-#FIXME Check if this is still true with GES
-#We should unblacklist it when #650985 is solved
+# FIXME Check if this is still true with GES
+# We should unblacklist it when #650985 is solved
 BLACKLISTED_PLUGINS = ["ldaspa"]
 ICON_WIDTH = 48 + 2 * 6  # 48 pixels, plus a margin on each side
 
@@ -273,8 +273,8 @@ class EffectsHandler(object):
         @type element_factory: L{Gst.ElementFactory}
         @returns: A human readable name C{str} for the effect
         """
-        #TODO check if it is the good way to make it translatable
-        #And to filter actually!
+        # TODO check if it is the good way to make it translatable
+        # And to filter actually!
         video = _("Video")
         audio = _("Audio |audio")
         effect = _("effect")
@@ -349,7 +349,7 @@ class EffectsHandler(object):
         return icon
 
 
-#----------------------- UI classes to manage effects -------------------------#
+# ----------------------- UI classes to manage effects -------------------------#
 HIDDEN_EFFECTS = ["frei0r-filter-scale0tilt"]
 
 GlobalSettings.addConfigSection('effect-library')
@@ -452,7 +452,7 @@ class EffectListWidget(Gtk.VBox, Loggable):
     def view_description_cell_data_func(column, cell, model, iter_, data):
 
         name, desc = model.get(iter_, COL_NAME_TEXT, COL_DESC_TEXT)
-        escape = glib.markup_escape_text
+        escape = GLib.markup_escape_text
         cell.props.markup = "<b>%s</b>\n%s" % (escape(name),
                                                escape(desc),)
 
@@ -614,7 +614,6 @@ class EffectsPropertiesManager(Loggable):
         self.action_log = instance.action_log
         self.app = instance
 
-
     def getEffectConfigurationUI(self, effect):
         """
             Permit to get a configuration GUI for the effect
@@ -628,7 +627,6 @@ class EffectsPropertiesManager(Loggable):
             # setElement will automatically look for custom UIs using mapBuilder
             effect_set_ui.setElement(effect, ignore=PROPS_TO_IGNORE,
                                      default_btn=True, use_element_props=True)
-            nb_rows = effect_set_ui.get_children()[0].get_property('n-rows')
             effect_configuration_ui = Gtk.ScrolledWindow()
             effect_configuration_ui.add_with_viewport(effect_set_ui)
             effect_configuration_ui.set_policy(Gtk.PolicyType.AUTOMATIC,
@@ -682,7 +680,7 @@ class EffectsPropertiesManager(Loggable):
         return effect_set_ui
 
     def _connectAllWidgetCbs(self, effect_configuration_ui, effect):
-        for prop, widget in effect_configuration_ui.properties.iteritems():
+        for prop, widget in effect_configuration_ui.properties.items():
             widget.connectValueChanged(self._onValueChangedCb, widget, prop)
 
     def _onSetDefaultCb(self, widget, dynamic):
@@ -696,5 +694,5 @@ class EffectsPropertiesManager(Loggable):
             self._current_effect_setting_ui.element.set_child_property(prop.name, value)
             self.debug("Effect property has been set successfully")
             self.action_log.commit()
-            self.app.current.pipeline.flushSeek()
+            self.app.project_manager.current_project.pipeline.flushSeek()
             self._current_element_values[prop.name] = value
