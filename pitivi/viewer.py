@@ -641,6 +641,9 @@ class Square(Clutter.Actor):
         self.dragAction.connect("drag-end", self._dragEndCb)
         self.dragAction.connect("drag-progress", self._dragProgressCb)
 
+        self._wratio = 1.0
+        self._hratio = 1.0
+
     def _addLine(self, coords, x, y, length, orientation):
         line = TransformationLine(coords)
         line.set_position(x, y)
@@ -762,7 +765,7 @@ class TransformationBox(Clutter.Actor, Loggable):
         self.squares.append(square)
 
     def _drawSquares(self):
-        project = self.app.current_project
+        project = self.app.project_manager.current_project
         if not project:
             return
 
@@ -808,6 +811,7 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
         self.drawing_area = GtkClutter.Embed()
         self.drawing_area.set_double_buffered(False)
         # We keep the Viewer
+        self._stage = self.drawing_area.get_stage()
         self._trans_box = TransformationBox(app, self._stage, self)
         self._stage.set_color(Clutter.Color.new(47, 22, 147, 255))
         self._stage.set_background_color(Clutter.Color.new(47, 22, 147, 255))
