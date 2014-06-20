@@ -659,7 +659,7 @@ class Square(Clutter.Actor):
         self.points = []
 
     def _clickedCb(self, actor, event):
-        print "clicked"
+        print("clicked")
 
     def _ungrab(self):
         self._box.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.ARROW))
@@ -755,7 +755,7 @@ class TransformationBox(Clutter.Actor, Loggable):
         self._drawSquares()
 
     def _drawSquare(self, coords, x, y, w, h):
-        print "square at : ", x, y, w, h
+        print("square at : ", x, y, w, h)
         square = Square(self, coords, w, h)
         square.set_position(x, y)
         self.add_child(square)
@@ -864,7 +864,7 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
         self.height = height
 
     def sizeCb(self, widget, alloc):
-        print widget
+        print(widget)
         w = min(alloc.width, alloc.height * widget.props.ratio)
         h = min(alloc.height, alloc.width / widget.props.ratio)
         self.set_size(w, h)
