@@ -155,7 +155,7 @@ class TrimHandle(Clutter.Texture):
         self.timelineElement.disconnect_by_func(self._elementEnterEventCb)
         self.timelineElement.disconnect_by_func(self._elementLeaveEventCb)
 
-    #Callbacks
+    # Callbacks
 
     def _enterEventCb(self, unused_actor, unused_event):
         self.timelineElement.set_reactive(False)
@@ -749,6 +749,11 @@ class Line(Clutter.Actor):
             self._ungrab()
 
 
+class KeyframeLine(Line):
+    def __init__(self):
+        Line.__init__(self)
+
+
 class KeyframeMenu(GtkClutter.Actor):
     def __init__(self, keyframe):
         GtkClutter.Actor.__init__(self)
@@ -953,7 +958,7 @@ class URISourceElement(TimelineElement):
 
     # Callbacks
     def _clickedCb(self, unused_action, unused_actor):
-        #TODO : Let's be more specific, masks etc ..
+        # TODO : Let's be more specific, masks etc ..
         mode = SELECT
         if self.timeline._container._controlMask:
             if not self.bElement.selected:

@@ -19,6 +19,8 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+import cairo
+
 from gi.repository import Clutter
 from gi.repository import Gtk
 from gi.repository import GtkClutter
@@ -62,6 +64,8 @@ GlobalSettings.addConfigOption("clickedPointColor", section="viewer",
 GlobalSettings.addConfigOption("pointColor", section="viewer",
     key="point-color",
     default='49a0e0')
+
+LINE_COLOR = (237, 212, 0, 255)
 
 
 class ViewerContainer(Gtk.VBox, Loggable):
@@ -172,7 +176,7 @@ class ViewerContainer(Gtk.VBox, Loggable):
     def _createUi(self):
         """ Creates the Viewer GUI """
         # Drawing area
-        self.internal = ViewerWidget(self.app.settings, realizedCb=self._videoRealizedCb)
+        self.internal = ViewerWidget(self.app, realizedCb=self._videoRealizedCb)
         # Transformation boxed DISABLED
         # self.internal.init_transformation_events()
         self.pack_start(self.internal, True, True, 0)
@@ -182,7 +186,7 @@ class ViewerContainer(Gtk.VBox, Loggable):
         vbox = Gtk.VBox()
         vbox.set_spacing(SPACING)
         self.external_window.add(vbox)
-        self.external = ViewerWidget(self.app.settings, realizedCb=self._videoRealizedCb)
+        self.external = ViewerWidget(self.app, realizedCb=self._videoRealizedCb)
         vbox.pack_start(self.external, True, True, 0)
         self.external_window.connect("delete-event", self._externalWindowDeleteCb)
         self.external_window.connect("configure-event", self._externalWindowConfigureCb)
@@ -464,10 +468,324 @@ class ViewerContainer(Gtk.VBox, Loggable):
             self.target.show()
 
 
-class TransformationBox(Clutter.Actor):
-    def __init__(self):
+def mul(a, b):
+    return a * b
+
+
+def div(a, b):
+    return a / b
+
+
+class ElementCoordinates(object):
+    def __init__(self, element):
+        self._preserve_dar = True
+        self.element = element
+        self._dar = float(self.width) / float(self.height)
+        self.seeker = Seeker()
+
+    def _updateAspect(self, name, new_value, operation):
+        if self._preserve_dar:
+            self.element.set_child_property(name, operation(new_value, self._dar))
+        else:
+            self._dar = float(self.width) / float(self.height)
+        self.seeker.flush()
+
+    @property
+    def width(self):
+        return self.element.get_child_property("width")[1]
+
+    @width.setter
+    def width(self, value):
+        self.element.set_child_property("width", value)
+        self._updateAspect("height", value, div)
+
+    @property
+    def height(self):
+        return self.element.get_child_property("height")[1]
+
+    @height.setter
+    def height(self, value):
+        self.element.set_child_property("height", value)
+        self._updateAspect("width", value, mul)
+
+    @property
+    def posX(self):
+        return self.element.get_child_property("posx")[1]
+
+    @posX.setter
+    def posX(self, value):
+        self.element.set_child_property("posx", value)
+        self.seeker.flush()
+
+    @property
+    def posY(self):
+        return self.element.get_child_property("posy")[1]
+
+    @posY.setter
+    def posY(self, value):
+        self.element.set_child_property("posy", value)
+        self.seeker.flush()
+
+
+class TransformationLine(Clutter.Actor):
+    def __init__(self, coords, startPoint=None, endPoint=None):
         Clutter.Actor.__init__(self)
-        self.set_background_color(Clutter.Color.new(255, 255, 255, 50))
+        self.coords = coords
+
+        self.canvas = Clutter.Canvas()
+        self.canvas.set_size(1000, 5)
+        self.canvas.connect("draw", self._drawCb)
+        self.set_content(self.canvas)
+        self.set_reactive(True)
+
+        self.gotDragged = False
+
+        self.dragAction = Clutter.DragAction()
+        self.add_action(self.dragAction)
+
+        self.dragAction.connect("drag-begin", self._dragBeginCb)
+        self.dragAction.connect("drag-end", self._dragEndCb)
+        self.dragAction.connect("drag-progress", self._dragProgressCb)
+
+        self.connect("button-release-event", self._clickedCb)
+        self.connect("motion-event", self._motionEventCb)
+        self.connect("enter-event", self._enterEventCb)
+        self.connect("leave-event", self._leaveEventCb)
+
+        self.startPoint = startPoint
+        self.endPoint = endPoint
+
+    def _drawCb(self, canvas, cr, width, unused_height):
+        """
+        This is where we actually create the line segments for keyframe curves.
+        We draw multiple lines (one-third of the height each) to add a "shadow"
+        around the actual line segment to improve visibility.
+        """
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+
+        _max_height = 3
+
+        cr.set_source_rgba(0, 0, 0, 0.5)
+        cr.move_to(0, _max_height / 3)
+        cr.line_to(width, _max_height / 3)
+        cr.set_line_width(_max_height / 3)
+        cr.stroke()
+
+        cr.set_source_rgba(0, 0, 0, 0.5)
+        cr.move_to(0, _max_height * 2 / 3)
+        cr.line_to(width, _max_height * 2 / 3)
+        cr.set_line_width(_max_height / 3)
+        cr.stroke()
+
+        cr.set_source_rgba(*LINE_COLOR)
+        cr.move_to(0, _max_height / 2)
+        cr.line_to(width, _max_height / 2)
+        cr.set_line_width(_max_height / 3)
+        cr.stroke()
+
+    def transposeXY(self, x, y):
+        pass
+
+    def ungrab(self):
+        pass
+
+    def _clickedCb(self, actor, event):
+        if self.gotDragged:
+            self.gotDragged = False
+            return
+
+    def _enterEventCb(self, actor, event):
+        pass
+
+    def _leaveEventCb(self, actor, event):
+        pass
+
+    def _motionEventCb(self, actor, event):
+        pass
+
+    def _dragBeginCb(self, action, actor, event_x, event_y, modifiers):
+        pass
+
+    def _dragProgressCb(self, action, actor, delta_x, delta_y):
+        self.gotDragged = True
+
+    def _dragEndCb(self, action, actor, event_x, event_y, modifiers):
+        pass
+
+
+class Square(Clutter.Actor):
+    def __init__(self, box, coords, w, h):
+        Clutter.Actor.__init__(self)
+        self.lines = []
+        self.points = []
+        self.set_size(w, h)
+        self._box = box
+        self._addLine(coords, 0, 0, w, 0.0)
+        self._addLine(coords, w, 0, h, 90.0)
+        self._addLine(coords, 0, h, w, 0.0)
+        self._addLine(coords, 0, 0, h, 90.0)
+        self.coords = coords
+
+        self.set_reactive(True)
+        self.connect("button-release-event", self._clickedCb)
+        self.connect("motion-event", self._motionEventCb)
+        self.connect("enter-event", self._enterEventCb)
+        self.connect("leave-event", self._leaveEventCb)
+
+        self.dragAction = Clutter.DragAction()
+        self.add_action(self.dragAction)
+
+        self.dragAction.connect("drag-begin", self._dragBeginCb)
+        self.dragAction.connect("drag-end", self._dragEndCb)
+        self.dragAction.connect("drag-progress", self._dragProgressCb)
+
+    def _addLine(self, coords, x, y, length, orientation):
+        line = TransformationLine(coords)
+        line.set_position(x, y)
+        line.set_size(length, 5)
+        line.props.rotation_angle_z = orientation
+        self.lines.append(line)
+        self.add_child(line)
+        line.canvas.invalidate()
+
+    def cleanup(self):
+        for line in self.lines:
+            self.remove_child(line)
+        for point in self.points:
+            self.remove_child(point)
+        self.lines = []
+        self.points = []
+
+    def _clickedCb(self, actor, event):
+        print "clicked"
+
+    def _ungrab(self):
+        self._box.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.ARROW))
+
+    def _enterEventCb(self, actor, event):
+        self._box.embed.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.HAND1))
+
+    def _leaveEventCb(self, actor, event):
+        self._ungrab()
+
+    def _motionEventCb(self, actor, event):
+        pass
+
+    def _dragBeginCb(self, action, actor, event_x, event_y, modifiers):
+        self.dragBeginStartX = event_x
+        self.dragBeginStartY = event_y
+        self.origX = self.props.x
+        self.origY = self.props.y
+        self.origPosX = self.coords.posX
+        self.origPosY = self.coords.posY
+
+        pwidth = self._box.app.current_project.videowidth
+        pheight = self._box.app.current_project.videoheight
+        bwidth = self._box.width
+        bheight = self._box.height
+        self._wratio = float(bwidth) / pwidth
+        self._hratio = float(bheight) / pheight
+
+    def _dragProgressCb(self, action, actor, delta_x, delta_y):
+        coords = self.dragAction.get_motion_coords()
+        delta_x = coords[0] - self.dragBeginStartX
+        delta_y = coords[1] - self.dragBeginStartY
+        self.coords.posX = (delta_x / self._wratio) + self.origPosX
+        self.coords.posY = (delta_y / self._hratio) + self.origPosY
+        return True
+
+    def _dragEndCb(self, action, actor, event_x, event_y, modifiers):
+        if self._box.getActorUnderPointer() != self:
+            self._ungrab()
+
+
+class TransformationBox(Clutter.Actor, Loggable):
+    def __init__(self, app, stage, embed):
+        Clutter.Actor.__init__(self)
+        Loggable.__init__(self)
+        self.seeker = Seeker()
+        self.embed = embed
+        self.app = app
+        self.elements = {}
+        self.set_background_color(Clutter.Color.new(255, 255, 255, 0))
+        self.width = 0
+        self.height = 0
+        self.squares = []
+        self._stage = stage
+        self._peekMouse()
+
+    def _peekMouse(self):
+        manager = Clutter.DeviceManager.get_default()
+
+        for device in manager.peek_devices():
+            if device.props.device_type == Clutter.InputDeviceType.POINTER_DEVICE \
+               and device.props.enabled is True:
+                self.mouse = device
+                break
+
+    def getActorUnderPointer(self):
+        return self.mouse.get_pointer_actor()
+
+    def setElements(self, elements):
+        self.elements = {}
+        for element in elements:
+            self.addElement(element, batch=True)
+        self._drawSquares()
+
+    def addElement(self, element, batch=False):
+        coords = ElementCoordinates(element)
+        self.elements[element] = coords
+        coords.width = 457
+        if not batch:
+            self._drawSquares()
+
+    def removeElement(self, element):
+        try:
+            self.elements.remove(element)
+        except KeyError:
+            self.error("can't remove that element as we don't manage it")
+        self._drawSquares()
+
+    def set_size(self, width, height):
+        Clutter.Actor.set_size(self, width, height)
+        self.width = width
+        self.height = height
+        self._drawSquares()
+
+    def _drawSquare(self, coords, x, y, w, h):
+        print "square at : ", x, y, w, h
+        square = Square(self, coords, w, h)
+        square.set_position(x, y)
+        self.add_child(square)
+        self.squares.append(square)
+
+    def _drawSquares(self):
+        project = self.app.current_project
+        if not project:
+            return
+
+        for square in self.squares:
+            square.cleanup()
+            self.remove_child(square)
+
+        self.squares = []
+
+        width = self.width
+        height = self.height
+
+        pwidth = project.videowidth
+        pheight = project.videoheight
+
+        for pair in self.elements.items():
+            element = pair[0]
+            coords = pair[1]
+            w = int((float(coords.width) / pwidth) * width)
+            h = int((float(coords.height) / pheight) * height)
+            x = int((float(coords.posX) / pwidth) * width)
+            y = int((float(coords.posY) / pheight) * height)
+            self._drawSquare(coords, x + 2, y, w, h)
 
 
 class ViewerWidget(Gtk.AspectFrame, Loggable):
@@ -480,17 +798,19 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
 
     __gsignals__ = {}
 
-    def __init__(self, settings=None, realizedCb=None):
+    def __init__(self, app=None, realizedCb=None):
         # Prevent black frames and flickering while resizing or changing focus:
         # The aspect ratio gets overridden by setDisplayAspectRatio.
         Gtk.AspectFrame.__init__(self, xalign=0.5, yalign=1.0,
                                  ratio=4.0 / 3.0, obey_child=False)
         Loggable.__init__(self)
-
+        self.app = app
         self.drawing_area = GtkClutter.Embed()
         self.drawing_area.set_double_buffered(False)
         # We keep the Viewer
-        self._trans_box = TransformationBox()
+        self._trans_box = TransformationBox(app, self._stage, self)
+        self._stage.set_color(Clutter.Color.new(47, 22, 147, 255))
+        self._stage.set_background_color(Clutter.Color.new(47, 22, 147, 255))
         self._stage = self.drawing_area.get_stage()
         # would show through the non-double-buffered widget!
         if realizedCb:
@@ -500,15 +820,16 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
         layout_manager = Clutter.BinLayout(x_align=Clutter.BinAlignment.FILL, y_align=Clutter.BinAlignment.FILL)
         self.drawing_area.get_stage().set_layout_manager(layout_manager)
         self.texture = Clutter.Texture()
+        self.texture.set_sync_size(False)
         # This is a trick to make the viewer appear darker at the start.
         self.texture.set_from_rgb_data(data=[0] * 3, has_alpha=False,
                 width=1, height=1, rowstride=3, bpp=3,
                 flags=Clutter.TextureFlags.NONE)
         self.drawing_area.get_stage().add_child(self.texture)
+        self._stage.add_child(self._trans_box)
         self.drawing_area.show()
 
         self.seeker = Seeker()
-        self.settings = settings
         self.box = None
         self.stored = False
         self.area = None
@@ -517,22 +838,45 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
         self.pixbuf = None
         self.pipeline = None
         self.transformation_properties = None
-        # FIXME PyGi Styling with Gtk3
-        # for state in range(Gtk.StateType.INSENSITIVE + 1):
-        #    self.modify_bg(state, self.style.black)
+        self._zoomFactor = 1.0
+        self.connect("scroll-event", self._scrolledCb)
+        self._trans_box.props.visible = False
+        self.width = 0
+        self.height = 0
+
+    def show_box(self, element):
+        self._trans_box.props.visible = True
+        self._trans_box.setElements([element])
+
+    def hide_box(self):
+        self._trans_box.props.visible = False
 
     def setDisplayAspectRatio(self, ratio):
         self.set_property("ratio", float(ratio))
 
     def set_size(self, width, height):
-        self._trans_box.set_size(width, height)
-        self.texture.set_size(width, height)
+        self._trans_box.set_size(width * self._zoomFactor, height * self._zoomFactor)
+        self.texture.set_size(width * self._zoomFactor, height * self._zoomFactor)
+        self.texture.props.x = (width - width * self._zoomFactor) / 2
+        self.texture.props.y = (height - height * self._zoomFactor) / 2
+        self._trans_box.set_position(self.texture.props.x, self.texture.props.y)
+        self.width = width
+        self.height = height
 
     def sizeCb(self, widget, alloc):
         print widget
         w = min(alloc.width, alloc.height * widget.props.ratio)
         h = min(alloc.height, alloc.width / widget.props.ratio)
         self.set_size(w, h)
+
+    def _scrolledCb(self, widget, event):
+        if event.direction == Gdk.ScrollDirection.UP:
+            self._zoomFactor += 0.1
+        elif event.direction == Gdk.ScrollDirection.DOWN:
+            self._zoomFactor -= 0.1
+        self._zoomFactor = min(self._zoomFactor, 1.0)
+        self._zoomFactor = max(self._zoomFactor, 0.1)
+        self.set_size(self.width, self.height)
 
 
 class PlayPauseButton(Gtk.Button, Loggable):
