@@ -39,6 +39,8 @@ from pitivi.utils.pipeline import AssetPipeline, Seeker
 from pitivi.utils.ui import SPACING, hex_to_rgb
 from pitivi.utils.widgets import TimeWidget
 
+import platform
+
 GlobalSettings.addConfigSection("viewer")
 GlobalSettings.addConfigOption("viewerDocked", section="viewer",
     key="docked",
@@ -129,6 +131,8 @@ class ViewerContainer(Gtk.VBox, Loggable):
         self.pipeline.connect("state-change", self._pipelineStateChangedCb)
         self.pipeline.connect("position", self._positionCb)
         self.pipeline.connect("duration-changed", self._durationChangedCb)
+
+        self.sink = pipeline._opengl_sink
 
         self._switch_output_window()
         self._setUiActive()
@@ -282,14 +286,14 @@ class ViewerContainer(Gtk.VBox, Loggable):
         nanoseconds = self.timecode_entry.getWidgetValue()
         self.seeker.seek(nanoseconds)
 
-    ## active Timeline calllbacks
+    # active Timeline calllbacks
     def _durationChangedCb(self, unused_pipeline, duration):
         if duration == 0:
             self._setUiActive(False)
         else:
             self._setUiActive(True)
 
-    ## Control Gtk.Button callbacks
+    # Control Gtk.Button callbacks
 
     def setZoom(self, zoom):
         """
@@ -331,7 +335,7 @@ class ViewerContainer(Gtk.VBox, Loggable):
         self.seeker.seek(end)
         self.app.gui.focusTimeline()
 
-    ## public methods for controlling playback
+    # public methods for controlling playback
 
     def undock(self, *unused_widget):
         if not self.docked:
@@ -459,7 +463,13 @@ class ViewerContainer(Gtk.VBox, Loggable):
 
         if self.target.get_realized():
             self.debug("Connecting the pipeline to the viewer's texture")
-            self.pipeline.connectWithViewer(self.target)
+            if platform.system() == 'Windows':
+                xid = self.target.drawing_area.get_window().get_handle()
+            else:
+                xid = self.target.drawing_area.get_window().get_xid()
+
+            self.sink.set_window_handle(xid)
+            self.sink.expose()
         else:
             # Show the widget and wait for the realized callback
             self.log("Target is not realized, showing the widget")
@@ -614,12 +624,12 @@ class TransformationBox():
         self.last_y = event.y
 
     def init_points(self):
-        #corner boxes
+        # corner boxes
         self.points[TOP_LEFT] = Point(self.left, self.top, self.settings)
         self.points[TOP_RIGHT] = Point(self.right, self.top, self.settings)
         self.points[BOTTOM_LEFT] = Point(self.left, self.bottom, self.settings)
         self.points[BOTTOM_RIGHT] = Point(self.right, self.bottom, self.settings)
-        #edge boxes
+        # edge boxes
         self.points[TOP] = Point(self.center.x, self.top, self.settings)
         self.points[BOTTOM] = Point(self.center.x, self.bottom, self.settings)
         self.points[LEFT] = Point(self.left, self.center.y, self.settings)
@@ -628,12 +638,12 @@ class TransformationBox():
     def update_points(self):
         self._update_measure()
 
-        #corner boxes
+        # corner boxes
         self.points[TOP_LEFT].set_position(self.left, self.top)
         self.points[TOP_RIGHT].set_position(self.right, self.top)
         self.points[BOTTOM_LEFT].set_position(self.left, self.bottom)
         self.points[BOTTOM_RIGHT].set_position(self.right, self.bottom)
-        #edge boxes
+        # edge boxes
         self.points[TOP].set_position(self.center.x, self.top)
         self.points[BOTTOM].set_position(self.center.x, self.bottom)
         self.points[LEFT].set_position(self.left, self.center.y)
@@ -796,7 +806,7 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
                                  ratio=4.0 / 3.0, obey_child=False)
         Loggable.__init__(self)
 
-        self.drawing_area = GtkClutter.Embed()
+        self.drawing_area = Gtk.DrawingArea()
         self.drawing_area.set_double_buffered(False)
         # We keep the ViewerWidget hidden initially, or the desktop wallpaper
         # would show through the non-double-buffered widget!
@@ -804,14 +814,6 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
             self.drawing_area.connect("realize", realizedCb, self)
         self.add(self.drawing_area)
 
-        layout_manager = Clutter.BinLayout(x_align=Clutter.BinAlignment.FILL, y_align=Clutter.BinAlignment.FILL)
-        self.drawing_area.get_stage().set_layout_manager(layout_manager)
-        self.texture = Clutter.Texture()
-        # This is a trick to make the viewer appear darker at the start.
-        self.texture.set_from_rgb_data(data=[0] * 3, has_alpha=False,
-                width=1, height=1, rowstride=3, bpp=3,
-                flags=Clutter.TextureFlags.NONE)
-        self.drawing_area.get_stage().add_child(self.texture)
         self.drawing_area.show()
 
         self.seeker = Seeker()
@@ -825,8 +827,8 @@ class ViewerWidget(Gtk.AspectFrame, Loggable):
         self.pipeline = None
         self.transformation_properties = None
         # FIXME PyGi Styling with Gtk3
-        #for state in range(Gtk.StateType.INSENSITIVE + 1):
-            #self.modify_bg(state, self.style.black)
+        # for state in range(Gtk.StateType.INSENSITIVE + 1):
+        # self.modify_bg(state, self.style.black)
 
     def setDisplayAspectRatio(self, ratio):
         self.set_property("ratio", float(ratio))
