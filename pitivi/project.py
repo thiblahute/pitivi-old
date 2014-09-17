@@ -941,9 +941,12 @@ class Project(Loggable, GES.Project):
     def update_restriction_caps(self):
         caps = Gst.Caps.new_empty_simple("video/x-raw")
 
-        caps.set_value("width", self.videowidth)
-        caps.set_value("height", self.videoheight)
-        caps.set_value("framerate", self.videorate)
+        if self.videowidth:
+            caps.set_value("width", self.videowidth)
+        if self.videoheight:
+            caps.set_value("height", self.videoheight)
+        if self.videorate:
+            caps.set_value("framerate", self.videorate)
         for track in self.timeline.get_tracks():
             if isinstance(track, GES.VideoTrack):
                 track.set_restriction_caps(caps)
