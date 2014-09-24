@@ -180,8 +180,7 @@ HARD_DEPENDENCIES = (CairoDependency("1.10.0"),
                      GstDependency("GES", "1.2.0.0"),
                      GtkOrClutterDependency("Gtk", "3.10.0"),
                      ClassicDependency("numpy", None),
-                     GIDependency("Gio", None),
-                     GstPluginDependency("gnonlin", "1.2.0"))
+                     GIDependency("Gio", None))
 
 PYCANBERRA_SOFT_DEPENDENCY = ClassicDependency("pycanberra", None,
                                                _("enables sound notifications when rendering is complete"))
