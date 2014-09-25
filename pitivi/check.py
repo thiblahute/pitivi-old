@@ -47,6 +47,7 @@ def _string_to_list(version):
 
 
 class Dependency(object):
+
     """
     This abstract class represents a module or component requirement.
     @param modulename: The string allowing for import or lookup of the component.
@@ -55,6 +56,7 @@ class Dependency(object):
     @param additional_message: A string that will be displayed to the user to further
       explain the purpose of the missing component.
     """
+
     def __init__(self, modulename, version_required_string, additional_message=None):
         self.version_required_string = version_required_string
         self.modulename = modulename
@@ -118,6 +120,7 @@ class Dependency(object):
 
 
 class GIDependency(Dependency):
+
     def _try_importing_component(self):
         try:
             __import__("gi.repository." + self.modulename)
@@ -131,6 +134,7 @@ class GIDependency(Dependency):
 
 
 class ClassicDependency(Dependency):
+
     def _try_importing_component(self):
         try:
             __import__(self.modulename)
@@ -144,10 +148,12 @@ class ClassicDependency(Dependency):
 
 
 class GstPluginDependency(Dependency):
+
     """
     Don't call check on its instances before actually checking
     Gst is importable.
     """
+
     def _try_importing_component(self):
         try:
             from gi.repository import Gst
@@ -164,16 +170,19 @@ class GstPluginDependency(Dependency):
 
 
 class GstDependency(GIDependency):
+
     def _format_version(self, module):
         return list(module.version())
 
 
 class GtkOrClutterDependency(GIDependency):
+
     def _format_version(self, module):
         return [module.MAJOR_VERSION, module.MINOR_VERSION, module.MICRO_VERSION]
 
 
 class CairoDependency(ClassicDependency):
+
     def __init__(self, version_required_string):
         ClassicDependency.__init__(self, "cairo", version_required_string)
 
@@ -226,7 +235,8 @@ def check_requirements():
         dependency.check()
         if not dependency.satisfied:
             if hard_dependencies_satisfied:
-                print((_("ERROR - The following hard dependencies are unmet:")))
+                print(
+                    (_("ERROR - The following hard dependencies are unmet:")))
                 print("==================================================")
             print(dependency)
             hard_dependencies_satisfied = False
@@ -243,7 +253,7 @@ def check_requirements():
 
     if not _check_audiosinks():
         print((_("Could not create audio output sink. "
-                "Make sure you have a valid one (pulsesink, alsasink or osssink).")))
+                 "Make sure you have a valid one (pulsesink, alsasink or osssink).")))
         return False
 
     return True
