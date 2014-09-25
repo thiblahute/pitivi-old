@@ -136,6 +136,9 @@ class ClipAdded(UndoableAction):
         st.set_value("layer-priority", self.layer.props.priority)
         st.set_value("asset-id", self.clip.get_asset().get_id())
         st.set_value("type", GObject.type_name(self.clip))
+        st.set_value("start", float(self.clip.props.start / Gst.SECOND))
+        st.set_value("inpoint", float(self.clip.props.in_point / Gst.SECOND))
+        st.set_value("duration", float(self.clip.props.duration / Gst.SECOND))
         return st
 
 
