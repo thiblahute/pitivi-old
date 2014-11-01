@@ -100,7 +100,7 @@ class TimelineStage(Clutter.ScrollActor, Zoomable, Loggable):
         Loggable.__init__(self)
         self.bTimeline = None
         self._project = None
-        self.current_group = GES.Group()
+        self.createSelectionGroup()
 
         self._container = container
         self.allowSeek = True
@@ -136,6 +136,10 @@ class TimelineStage(Clutter.ScrollActor, Zoomable, Loggable):
         self.drawMarquee = False
 
     # Public API
+
+    def createSelectionGroup(self):
+        self.current_group = GES.Group()
+        self.current_group.props.serialize = False
 
     def setProject(self, project):
         """
@@ -532,7 +536,7 @@ class TimelineStage(Clutter.ScrollActor, Zoomable, Loggable):
 
         if self.current_group:
             GES.Container.ungroup(self.current_group, False)
-            self.current_group = GES.Group()
+            self.createSelectionGroup()
 
         self.dragBeginStartX = event.x - CONTROL_WIDTH + self._scroll_point.x
         self.dragBeginStartY = event.y + self._scroll_point.y
@@ -558,7 +562,7 @@ class TimelineStage(Clutter.ScrollActor, Zoomable, Loggable):
 
         x, y, width, height = self._translateToTimelineContext(event)
         elements = self._getElementsInRegion(x, y, width, height)
-        self.current_group = GES.Group()
+        self.createSelectionGroup()
         for element in elements:
             self.current_group.add(element)
         selection = [child for child in self.current_group.get_children(True)
@@ -1149,7 +1153,7 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
                 GES.Container.ungroup(container, False)
                 self.timeline.bTimeline.commit()
 
-            self.timeline.current_group = GES.Group()
+            self.timeline.createSelectionGroup()
 
             self.app.action_log.commit()
             self.bTimeline.commit()
@@ -1171,8 +1175,7 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
 
             if containers:
                 group = GES.Container.group(list(containers))
-
-            self.timeline.current_group = GES.Group()
+            self.timeline.createSelectionGroup()
 
             self.bTimeline.commit()
             self.app.action_log.commit()

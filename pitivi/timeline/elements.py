@@ -155,7 +155,7 @@ class TrimHandle(Clutter.Texture):
         self.timelineElement.disconnect_by_func(self._elementEnterEventCb)
         self.timelineElement.disconnect_by_func(self._elementLeaveEventCb)
 
-    #Callbacks
+    # Callbacks
 
     def _enterEventCb(self, unused_actor, unused_event):
         self.timelineElement.set_reactive(False)
@@ -953,7 +953,7 @@ class URISourceElement(TimelineElement):
 
     # Callbacks
     def _clickedCb(self, unused_action, unused_actor):
-        #TODO : Let's be more specific, masks etc ..
+        # TODO : Let's be more specific, masks etc ..
         mode = SELECT
         if self.timeline._container._controlMask:
             if not self.bElement.selected:
@@ -964,8 +964,9 @@ class URISourceElement(TimelineElement):
                 mode = UNSELECT
         elif not self.bElement.selected:
             GES.Container.ungroup(self.timeline.current_group, False)
-            self.timeline.current_group = GES.Group()
-            self.timeline.current_group.add(self.bElement.get_toplevel_parent())
+            self.timeline.createTemporaryGroup()
+            self.timeline.current_group.add(
+                self.bElement.get_toplevel_parent())
             self.timeline._container.gui.switchContextTab(self.bElement)
 
         children = self.bElement.get_toplevel_parent().get_children(True)
