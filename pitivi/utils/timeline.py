@@ -23,6 +23,10 @@
 from gi.repository import GES
 from gi.repository import GObject
 from gi.repository import Gst
+from gi.repository import Gtk
+
+from pitivi.utils.loggable import Loggable
+from pitivi.utils import ui
 
 
 # Selection modes
@@ -78,7 +82,7 @@ class Selected(GObject.Object):
     selected = property(getSelected, setSelected)
 
 
-class Selection(GObject.Object):
+class Selection(GObject.Object, Loggable):
 
     """
     A collection of L{GES.Clip}.
@@ -96,6 +100,7 @@ class Selection(GObject.Object):
 
     def __init__(self):
         GObject.Object.__init__(self)
+        Loggable.__init__(self)
         self.selected = set()
 
     def setToObj(self, obj, mode):
@@ -142,9 +147,13 @@ class Selection(GObject.Object):
 
         for obj in old_selection - self.selected:
             for element in obj.get_children(False):
+                ui.unset_children_state_recurse(obj.ui, Gtk.StateFlags.SELECTED)
                 if not isinstance(element, GES.BaseEffect) and not isinstance(element, GES.TextOverlay):
                     element.selected.selected = False
+
         for obj in self.selected - old_selection:
+            self.error("Setting selected %s" % obj.ui)
+            ui.set_children_state_recurse(obj.ui, Gtk.StateFlags.SELECTED)
             for element in obj.get_children(False):
                 if not isinstance(element, GES.BaseEffect) and not isinstance(element, GES.TextOverlay):
                     element.selected.selected = True
@@ -271,8 +280,7 @@ class EditingContext(GObject.Object):
         self.new_position = position
         self.new_priority = priority
 
-        res = self.focus.edit(
-            [], priority, self.mode, self.edge, int(position))
+        res = self.focus.edit([], priority, self.mode, self.edge, int(position))
         self.action_log.app.write_action("edit-container", {
             "container-name": self.focus.get_name(),
             "position": float(position / Gst.SECOND),

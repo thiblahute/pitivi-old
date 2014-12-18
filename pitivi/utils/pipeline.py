@@ -182,7 +182,7 @@ class SimplePipeline(GObject.Object, Loggable):
         self._bus.add_signal_watch()
         self._bus.connect("message", self._busMessageCb)
         self._listening = False  # for the position handler
-        self._listeningInterval = 300  # default 300ms
+        self._listeningInterval = 50  # default 300ms
         self._listeningSigId = 0
         self._duration = Gst.CLOCK_TIME_NONE
         self._last_position = int(0 * Gst.SECOND)
@@ -344,7 +344,7 @@ class SimplePipeline(GObject.Object, Loggable):
         self._duration = dur
         return dur
 
-    def activatePositionListener(self, interval=500):
+    def activatePositionListener(self, interval=50):
         """
         Activate the position listener.
 

@@ -28,13 +28,13 @@ import os
 import pickle
 import sqlite3
 
-from gi.repository import Clutter
 from gi.repository import Cogl
 from gi.repository import GES
 from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import GdkPixbuf
 from gi.repository import Gst
+from gi.repository import Gtk
 
 # Our C module optimizing waveforms rendering
 try:
@@ -151,25 +151,24 @@ class PreviewGenerator(object):
         PreviewGenerator.__manager.addPipeline(self)
 
 
-class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
+class VideoPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
 
     # We could define them in PreviewGenerator, but then for some reason they
     # are ignored.
     __gsignals__ = PREVIEW_GENERATOR_SIGNALS
 
-    def __init__(self, bElement, timeline):
+    def __init__(self, bElement):
         """
         @param bElement : the backend GES.TrackElement
         @param track : the track to which the bElement belongs
-        @param timeline : the containing graphic timeline.
         """
-        Clutter.ScrollActor.__init__(self)
+        super(VideoPreviewer, self).__init__()
         PreviewGenerator.__init__(self, GES.TrackType.VIDEO)
         Zoomable.__init__(self)
         Loggable.__init__(self)
 
         # Variables related to the timeline objects
-        self.timeline = timeline
+        self.timeline = bElement.get_parent().get_timeline().ui
         self.bElement = bElement
         # Guard against malformed URIs
         self.uri = quote_uri(bElement.props.uri)
@@ -194,7 +193,7 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
         self.interval = 500  # Every 0.5 second, reevaluate the situation
 
         # Connect signals and fire things up
-        self.timeline.connect("scrolled", self._scrollCb)
+        self.timeline.hadj.connect("value-changed", self._scrollCb)
         self.bElement.connect("notify::duration", self._durationChangedCb)
         self.bElement.connect("notify::in-point", self._inpointChangedCb)
         self.bElement.connect("notify::start", self._startChangedCb)
@@ -204,6 +203,8 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
 
     # Internal API
     def _update(self, unused_msg_source=None):
+        self.props.width_request = self.nsToPixel(self.bElement.get_asset().get_filesource_asset().props.duration)
+        self.props.width = self.nsToPixel(self.bElement.get_asset().get_filesource_asset().props.duration)
         if self.thumb_width:
             self._addVisibleThumbnails()
             if self.wishlist:
@@ -289,6 +290,10 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
             # removed from the timeline after the PreviewGeneratorManager
             # started this job.
             return
+
+        self.props.width_request = self.nsToPixel(self.bElement.get_asset().get_filesource_asset().props.duration)
+        self.props.width = self.nsToPixel(self.bElement.get_asset().get_filesource_asset().props.duration)
+
         self.debug(
             'Now generating thumbnails for: %s', filename_from_uri(self.uri))
         query_success, duration = self.pipeline.query_duration(Gst.Format.TIME)
@@ -302,10 +307,16 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
 
         self._checkCPU()
 
+        self.error("Inpoint = %s" % self.bElement.props.in_point)
         if self.bElement.props.in_point != 0:
-            position = Clutter.Point()
-            position.x = Zoomable.nsToPixel(self.bElement.props.in_point)
-            self.scroll_to_point(position)
+            adj = self.get_hadjustment()
+            adj.props.page_size = 1.0
+            adj.props.value = Zoomable.nsToPixel(self.bElement.props.in_point)
+            self.error("Adjustment is %s -- %s -- duration %s px" %
+                       (self.get_hadjustment().get_value(),
+                        Zoomable.nsToPixel(self.bElement.props.in_point),
+                        self.props.width
+                        ))
         self._addVisibleThumbnails()
         # Save periodically to avoid the common situation where the user exits
         # the app before a long clip has been fully thumbnailed.
@@ -364,11 +375,15 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
         # make sure that we don't show thumbnails more often than thumb_period
         return max(thumb_duration, self.thumb_period)
 
+    def _remove_all_children(self):
+        for child in self.get_children():
+            self.remove(child)
+
     def _addVisibleThumbnails(self):
         """
         Get the thumbnails to be displayed in the currently visible clip portion
         """
-        self.remove_all_children()
+        self._remove_all_children()
         old_thumbs = self.thumbs
         self.thumbs = {}
         self.wishlist = []
@@ -379,17 +394,15 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
 
         for current_time in range(element_left, element_right, thumb_duration):
             thumb = Thumbnail(self.thumb_width, self.thumb_height)
-            thumb.set_position(
-                Zoomable.nsToPixel(current_time), THUMB_MARGIN_PX)
-            self.add_child(thumb)
+            self.put(thumb, Zoomable.nsToPixel(current_time - element_left),
+                     (self.get_parent().get_allocation().height - self.thumb_height) / 2)
             self.thumbs[current_time] = thumb
             if current_time in self.thumb_cache:
                 gdkpixbuf = self.thumb_cache[current_time]
-                if self._allAnimated or current_time not in old_thumbs:
-                    self.thumbs[
-                        current_time].set_from_gdkpixbuf_animated(gdkpixbuf)
-                else:
-                    self.thumbs[current_time].set_from_gdkpixbuf(gdkpixbuf)
+                self.thumbs[current_time].set_from_pixbuf(gdkpixbuf)
+                self.thumbs[current_time].set_visible(True)
+
+                # FIXME Handle ANIMATED?
             else:
                 self.wishlist.append(current_time)
         self._allAnimated = False
@@ -431,7 +444,7 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
                 self.fixme("Thumbnail is already set for time: %s, %s",
                            format_ns(time), format_ns(original_time))
                 return
-        thumb.set_from_gdkpixbuf_animated(pixbuf)
+        thumb.set_from_pixbuf(pixbuf)
         if time in self.queue:
             self.queue.remove(time)
         self.thumb_cache[time] = pixbuf
@@ -439,7 +452,7 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
     # Interface (Zoomable)
 
     def zoomChanged(self):
-        self.remove_all_children()
+        self._remove_all_children()
         self._allAnimated = True
         self._update()
 
@@ -462,34 +475,8 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
         # determine the visible left edge of the timeline
         # TODO: isn't there some easier way to get the scroll point of the ScrollActor?
         # timeline_left = -(self.timeline.get_transform().xw - self.timeline.props.x)
-        timeline_left = self.timeline.get_scroll_point().x
-
-        # determine the width of the pipeline
-        # by intersecting the timeline's and the stage's allocation
-        timeline_allocation = self.timeline.props.allocation
-        stage_allocation = self.timeline.get_stage().props.allocation
-
-        timeline_rect = Clutter.Rect()
-        timeline_rect.init(timeline_allocation.x1,
-                           timeline_allocation.y1,
-                           timeline_allocation.x2 - timeline_allocation.x1,
-                           timeline_allocation.y2 - timeline_allocation.y1)
-
-        stage_rect = Clutter.Rect()
-        stage_rect.init(stage_allocation.x1,
-                        stage_allocation.y1,
-                        stage_allocation.x2 - stage_allocation.x1,
-                        stage_allocation.y2 - stage_allocation.y1)
-
-        has_intersection, intersection = timeline_rect.intersection(stage_rect)
-
-        if not has_intersection:
-            return (0, 0)
-
-        timeline_width = intersection.size.width
-
-        # determine the visible right edge of the timeline
-        timeline_right = timeline_left + timeline_width
+        timeline_left = self.timeline.hadj.get_value()
+        timeline_right = self.timeline.hadj.get_page_size() + timeline_left
 
         # convert to nanoseconds
         time_left = Zoomable.pixelToNs(timeline_left)
@@ -526,9 +513,7 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
         self._update()
 
     def _inpointChangedCb(self, unused_bElement, unused_value):
-        position = Clutter.Point()
-        position.x = Zoomable.nsToPixel(self.bElement.props.in_point)
-        self.scroll_to_point(position)
+        self.get_hadjustment().set_value(Zoomable.nsToPixel(self.bElement.props.in_point))
         self._update()
 
     def _durationChangedCb(self, unused_bElement, unused_value):
@@ -557,37 +542,15 @@ class VideoPreviewer(Clutter.ScrollActor, PreviewGenerator, Zoomable, Loggable):
         Zoomable.__del__(self)
 
 
-class Thumbnail(Clutter.Actor):
+class Thumbnail(Gtk.Image):
 
     def __init__(self, width, height):
-        Clutter.Actor.__init__(self)
-        image = Clutter.Image.new()
-        self.props.content = image
+        super(Thumbnail, self).__init__()
         self.width = width
         self.height = height
-        self.set_opacity(0)
-        self.set_size(self.width, self.height)
+        self.props.width_request = self.width
+        self.props.height_request = self.height
         self.has_pixel_data = False
-
-    def set_from_gdkpixbuf(self, gdkpixbuf):
-        row_stride = gdkpixbuf.get_rowstride()
-        pixel_data = gdkpixbuf.get_pixels()
-        alpha = gdkpixbuf.get_has_alpha()
-        self.has_pixel_data = True
-        if alpha:
-            self.props.content.set_data(pixel_data, Cogl.PixelFormat.RGBA_8888,
-                                        self.width, self.height, row_stride)
-        else:
-            self.props.content.set_data(pixel_data, Cogl.PixelFormat.RGB_888,
-                                        self.width, self.height, row_stride)
-        self.set_opacity(255)
-
-    def set_from_gdkpixbuf_animated(self, gdkpixbuf):
-        self.save_easing_state()
-        self.set_easing_duration(750)
-        self.set_from_gdkpixbuf(gdkpixbuf)
-        self.restore_easing_state()
-
 
 caches = {}
 
@@ -756,7 +719,7 @@ class PipelineCpuAdapter(Loggable):
                     self.ready = False
 
 
-class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
+class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
 
     """
     Audio previewer based on the results from the "level" gstreamer element.
@@ -764,8 +727,8 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
 
     __gsignals__ = PREVIEW_GENERATOR_SIGNALS
 
-    def __init__(self, bElement, timeline):
-        Clutter.Actor.__init__(self)
+    def __init__(self, bElement):
+        super(AudioPreviewer, self).__init__()
         PreviewGenerator.__init__(self, GES.TrackType.AUDIO)
         Zoomable.__init__(self)
         Loggable.__init__(self)
@@ -773,32 +736,29 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
         self.pipeline = None
         self.discovered = False
         self.bElement = bElement
+        self.timeline = bElement.get_parent().get_timeline().ui
+
         # Guard against malformed URIs
         self._uri = quote_uri(bElement.props.uri)
-        self.timeline = timeline
-        self.actors = []
 
-        self.set_content_scaling_filters(
-            Clutter.ScalingFilter.NEAREST, Clutter.ScalingFilter.NEAREST)
-        self.canvas = Clutter.Canvas()
-        self.set_content(self.canvas)
+        # FIXME, what is that about?
+        # self.set_content_scaling_filters(
+        #    Clutter.ScalingFilter.NEAREST, Clutter.ScalingFilter.NEAREST)
+
         self.width = 0
         self._num_failures = 0
         self.lastUpdate = None
 
-        self.current_geometry = (-1, -1)
-
         self.adapter = None
         self.surface = None
-        self.timeline.connect("scrolled", self._scrolledCb)
-        self.canvas.connect("draw", self._drawContentCb)
-        self.canvas.invalidate()
+        self.timeline.hadj.connect("value-changed", self._scrolledCb)
 
         self._callback_id = 0
 
     def startLevelsDiscoveryWhenIdle(self):
         self.debug('Waiting for UI to become idle for: %s',
                    filename_from_uri(self._uri))
+
         GLib.idle_add(self._startLevelsDiscovery, priority=GLib.PRIORITY_LOW)
 
     def _startLevelsDiscovery(self):
@@ -860,15 +820,13 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
         width_px = self.nsToPixel(self.bElement.props.duration)
         if width_px <= 0:
             return
-        start = self.timeline.get_scroll_point().x - self.nsToPixel(
+        start = self.timeline.hadj.get_value() - self.nsToPixel(
             self.bElement.props.start)
         start = max(0, start)
         # Take into account the timeline width, to avoid building
         # huge clips when the timeline is zoomed in a lot.
-        timeline_width = self.timeline._container.get_allocation(
-        ).width - CONTROL_WIDTH
-        end = min(width_px,
-                  self.timeline.get_scroll_point().x + timeline_width + MARGIN)
+        timeline_width = self.timeline.get_allocation().width - CONTROL_WIDTH
+        end = min(width_px, self.timeline.hadj.get_value() + timeline_width + MARGIN)
         self.width = int(end - start)
         # We've been called at a moment where size was updated but not
         # scroll_point.
@@ -876,12 +834,13 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
             return
 
         # We need to take duration and inpoint into account.
-        asset_duration = self.bElement.get_parent().get_asset().get_duration()
+        asset_duration = self.bElement.get_asset().get_filesource_asset().get_duration()
         if self.bElement.props.duration:
             nbSamples = self.nbSamples / \
                 (float(asset_duration) / float(self.bElement.props.duration))
         else:
             nbSamples = self.nbSamples
+
         if self.bElement.props.in_point:
             startOffsetSamples = self.nbSamples / \
                 (float(asset_duration) / float(self.bElement.props.in_point))
@@ -891,10 +850,9 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
         self.start = int(start / width_px * nbSamples + startOffsetSamples)
         self.end = int(end / width_px * nbSamples + startOffsetSamples)
 
-        self.canvas.set_size(self.width, EXPANDED_SIZE)
-        Clutter.Actor.set_size(self, self.width, EXPANDED_SIZE)
-        self.set_position(start, self.props.y)
-        self.canvas.invalidate()
+        self.set_size(self.width, EXPANDED_SIZE)
+        self.props.width_request = self.width
+        self.props.height_request = EXPANDED_SIZE
 
     def _prepareSamples(self):
         # Let's go mono.
@@ -992,9 +950,7 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
             return True
         return False
 
-    def _drawContentCb(self, unused_canvas, context, unused_surf_w, unused_surf_h):
-        context.set_operator(cairo.OPERATOR_CLEAR)
-        context.paint()
+    def do_draw(self, context):
         if not self.discovered:
             return
 
@@ -1002,7 +958,8 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
             self.surface.finish()
 
         self.surface = renderer.fill_surface(
-            self.samples[self.start:self.end], int(self.width), int(EXPANDED_SIZE))
+            self.samples[self.start:self.end], int(self.width),
+            int(self.get_parent().get_allocation().height))
 
         context.set_operator(cairo.OPERATOR_OVER)
         context.set_source_surface(self.surface, 0, 0)
@@ -1029,6 +986,5 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
 
     def cleanup(self):
         self.stopGeneration()
-        self.canvas.disconnect_by_func(self._drawContentCb)
         self.timeline.disconnect_by_func(self._scrolledCb)
         Zoomable.__del__(self)

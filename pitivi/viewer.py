@@ -19,9 +19,7 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
-from gi.repository import Clutter
 from gi.repository import Gtk
-from gi.repository import GtkClutter
 from gi.repository import Gdk
 try:
     from gi.repository import GdkX11

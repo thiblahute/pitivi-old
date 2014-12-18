@@ -34,7 +34,7 @@ from gettext import gettext as _
 from pitivi.utils.pipeline import Seeker
 from pitivi.utils.timeline import Zoomable
 from pitivi.utils.loggable import Loggable
-from pitivi.utils.ui import NORMAL_FONT, PLAYHEAD_COLOR, PLAYHEAD_WIDTH, set_cairo_color, time_to_string, beautify_length
+from pitivi.utils.ui import NORMAL_FONT, PLAYHEAD_WIDTH, set_cairo_color, time_to_string, beautify_length
 
 # A series of valid interval lengths in seconds.
 SCALES = (0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 3600)
@@ -395,7 +395,7 @@ class ScaleRuler(Gtk.DrawingArea, Zoomable, Loggable):
         # without this the line appears blurry.
         xpos = self.nsToPixel(self.position) - self.pixbuf_offset + 0.5
         context.set_line_width(PLAYHEAD_WIDTH + 2)
-        set_cairo_color(context, PLAYHEAD_COLOR)
+        set_cairo_color(context, (255, 0, 0))
         context.move_to(xpos, 0)
         context.line_to(xpos, context.get_target().get_height())
         context.stroke()
