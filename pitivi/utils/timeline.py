@@ -406,6 +406,18 @@ class Zoomable(object):
         return int((float(duration) / Gst.SECOND) * cls.zoomratio)
 
     @classmethod
+    def nsToPixelAccurate(cls, duration):
+        """
+        Returns the pixel equivalent of the given duration, according to the
+        set zoom ratio
+        """
+        # Here, a long time ago (206f3a05), a pissed programmer said:
+        # DIE YOU CUNTMUNCH CLOCK_TIME_NONE UBER STUPIDITY OF CRACK BINDINGS !!
+        if duration == Gst.CLOCK_TIME_NONE:
+            return 0
+        return ((float(duration) / Gst.SECOND) * cls.zoomratio)
+
+    @classmethod
     def _zoomChanged(cls):
         for inst in cls._instances:
             inst.zoomChanged()
