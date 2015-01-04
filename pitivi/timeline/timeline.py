@@ -232,6 +232,8 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._setUpDragAndDrop()
         self._setupSelectionMarquee()
 
+        self._pressed = False
+
     def createSelectionGroup(self):
         if self.current_group:
             GES.Container.ungroup(self.current_group, False)
@@ -281,8 +283,17 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
     def _durationChangedCb(self, bTimeline, pspec):
         self.queue_draw()
 
+    def scrollToPlayhead(self,):
+        if self._pressed or self._container.ruler.pressed:
+            self._pressed = False
+            return
+
+        self.hadj.set_value(self.nsToPixel(self.lastPosition) -
+                            (self.layout.get_allocation().width / 2))
+
     def _positionCb(self, unused_pipeline, position):
         self.lastPosition = position
+        self.scrollToPlayhead()
         self.layout.move(self._playhead, self.nsToPixel(self.lastPosition), 0)
 
     # snapping indicator
@@ -368,13 +379,14 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         if event.type == Gdk.EventType.SCROLL:
             self._scroll(event)
         elif event.type == Gdk.EventType.BUTTON_PRESS:
+            self._pressed = True
 
-            self.error("START DRAGGING")
             res, button = event.get_button()
             if res and button == 1:
                 self.draggingElement = self._getParentOfType(event_widget, Clip)
                 if self.draggingElement is not None:
                     self._dragStartX = event.x
+
                 else:
                     self._marquee.setStartPosition(event)
 
@@ -391,7 +403,19 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
             else:
                 self._selectUnderMarquee()
 
-        return False
+            if self.allowSeek:
+                event_widget = Gtk.get_event_widget(event)
+                x, unused_y = event_widget.translate_coordinates(self, event.x, event.y)
+                x -= CONTROL_WIDTH
+                x += self.hadj.get_value()
+
+                position = self.pixelToNs(x)
+                self._project.seeker.seek(position)
+
+            self.allowSeek = True
+            self._snapEndedCb()
+
+            return False
 
     def _selectUnderMarquee(self):
         if self._marquee.props.width_request > 0:
@@ -423,15 +447,15 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
                 pass
         elif event.get_state()[1] & Gdk.ModifierType.CONTROL_MASK:
             if delta_y > 0:
-                timelineUtils.Zoomable.zoomIn()
                 self.updatePosition()
 
+                timelineUtils.Zoomable.zoomOut()
                 # self.error("ZOOM IN")
                 self.queue_draw()
             elif delta_y < 0:
                 rescroll = True
                 self.updatePosition()
-                timelineUtils.Zoomable.zoomOut()
+                timelineUtils.Zoomable.zoomIn()
                 # self.error("ZOOM OUT")
                 self.queue_draw()
 
@@ -883,10 +907,6 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
         else:
             self._scrollToPixel(x)
 
-    def seekInPosition(self, position):
-        self.pressed = True
-        self._seeker.seek(position)
-
     def setProject(self, project):
         self._project = project
         if self._project:
@@ -945,7 +965,6 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
         self.scrolled = 0
 
         self.zoomed_fitted = True
-        self.pressed = False
 
         self.timeline = Timeline(self, self.app)
         self.hadj = self.timeline.layout.get_hadjustment()
@@ -955,7 +974,6 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
         self._hscrollbar = Gtk.HScrollbar(adjustment=self.hadj)
 
         self.connect("button-press-event", self._timelineClickedCb)
-        self.connect("button-release-event", self._timelineClickReleasedCb)
 
         self.ruler = ScaleRuler(self, self.hadj)
         self.ruler.props.hexpand = True
@@ -1198,20 +1216,7 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
         return False
 
     def _scrollToPlayhead(self):
-        if self.ruler.pressed or self.pressed:
-            self.pressed = False
-            return
-        self.error("Check the self.timeline.get_allocated_width calculation")
-        canvas_width = self.timeline.get_allocated_width()
-        try:
-            new_pos = Zoomable.nsToPixel(self._project.pipeline.getPosition())
-        except PipelineError as e:
-            self.info("Pipeline error: %s", e)
-            return
-        except AttributeError:  # Standalone, no pipeline.
-            return
-        playhead_pos_centered = new_pos - canvas_width / 2
-        self.scrollToPixel(max(0, playhead_pos_centered))
+        self.timeline.scrollToPlayhead()
 
     def _deleteSelected(self, unused_action):
         if self.bTimeline:
@@ -1427,19 +1432,6 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
     def _timelineClickedCb(self, unused_timeline, unused_event):
         self.pressed = True
         self.grab_focus()  # Prevent other widgets from being confused
-
-    def _timelineClickReleasedCb(self, unused_timeline, event):
-        if self.app and self.timeline.allowSeek is True:
-            event_widget = Gtk.get_event_widget(event)
-            x, unused_y = event_widget.translate_coordinates(self, event.x, event.y)
-            x -= CONTROL_WIDTH
-            x += self.hadj.get_value()
-
-            position = self.pixelToNs(x)
-            self._seeker.seek(position)
-
-        self.timeline.allowSeek = True
-        self.timeline._snapEndedCb()
 
     def _renderingSettingsChangedCb(self, project, item, value):
         """
