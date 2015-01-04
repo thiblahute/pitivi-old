@@ -638,7 +638,7 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self.show_all()
 
     def _removeLayer(self, bLayer):
-        self._layers_vbox.remove(bLayer.ui)
+        self._layers_vbox.remove(bLayer.ui.get_parent())
         self._layers_controls_vbox.remove(bLayer.control_ui)
         bLayer.ui = None
         bLayer.control_ui = None
