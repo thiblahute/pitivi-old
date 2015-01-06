@@ -62,6 +62,7 @@ WAVEFORM_UPDATE_INTERVAL = timedelta(microseconds=500000)
 # For the waveforms, ensures we always have a little extra surface when
 # scrolling while playing.
 MARGIN = 500
+SAMPLE_DURATION_NS = 10 * 1000 * 1000
 
 PREVIEW_GENERATOR_SIGNALS = {
     "done": (GObject.SIGNAL_RUN_LAST, None, ()),
@@ -779,7 +780,7 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
             'Now generating waveforms for: %s', filename_from_uri(self._uri))
         self.peaks = None
         self.pipeline = Gst.parse_launch("uridecodebin name=decode uri=" + self._uri +
-                                         " ! audioconvert ! level name=wavelevel interval=10000000 post-messages=true ! fakesink qos=false name=faked")
+                                         " ! audioconvert ! level name=wavelevel interval=%i post-messages=true ! fakesink qos=false name=faked" % SAMPLE_DURATION_NS)
         faked = self.pipeline.get_by_name("faked")
         faked.props.sync = True
         self._wavelevel = self.pipeline.get_by_name("wavelevel")
@@ -788,8 +789,8 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
 
-        self.nSamples = self.bElement.get_parent(
-        ).get_asset().get_duration() / 10000000
+        duration = self.bElement.get_parent().get_asset().get_duration()
+        self.nSamples = int(duration / SAMPLE_DURATION_NS)
         bus.connect("message", self._busMessageCb)
         self.becomeControlled()
 
@@ -820,35 +821,27 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
         width_px = self.nsToPixel(self.bElement.props.duration)
         if width_px <= 0:
             return
-        start = self.timeline.hadj.get_value() - self.nsToPixel(
-            self.bElement.props.start)
-        start = max(0, start)
+        absolute_left_px = self.nsToPixel(self.bElement.props.start)
+        left = absolute_left_px - self.timeline.hadj.get_value()
         # Take into account the timeline width, to avoid building
         # huge clips when the timeline is zoomed in a lot.
         timeline_width = self.timeline.get_allocation().width - CONTROL_WIDTH
-        end = min(width_px, self.timeline.hadj.get_value() + timeline_width + MARGIN)
-        self.width = int(end - start)
-        # We've been called at a moment where size was updated but not
-        # scroll_point.
+        right = min(left + width_px, self.timeline.hadj.get_value() + timeline_width + MARGIN)
+        self.width = int(right - left)
         if self.width < 0:
+            # Out of the view window.
             return
 
+        # Calculate the first and the last sample to be displayed.
         # We need to take duration and inpoint into account.
-        asset_duration = self.bElement.get_asset().get_filesource_asset().get_duration()
+        duration = self.bElement.get_asset().get_filesource_asset().get_duration()
+        in_point = self.bElement.props.in_point
+        self.start = int(self.samples_count * in_point / duration)
         if self.bElement.props.duration:
-            nbSamples = self.nbSamples / \
-                (float(asset_duration) / float(self.bElement.props.duration))
+            duration_samples = self.samples_count * self.bElement.props.duration / duration
         else:
-            nbSamples = self.nbSamples
-
-        if self.bElement.props.in_point:
-            startOffsetSamples = self.nbSamples / \
-                (float(asset_duration) / float(self.bElement.props.in_point))
-        else:
-            startOffsetSamples = 0
-
-        self.start = int(start / width_px * nbSamples + startOffsetSamples)
-        self.end = int(end / width_px * nbSamples + startOffsetSamples)
+            duration_samples = self.samples_count
+        self.end = int(self.start + duration_samples)
 
         self.set_size(self.width, EXPANDED_SIZE)
         self.props.width_request = self.width
@@ -867,10 +860,10 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
         pickle.dump(self.samples, f)
 
     def _startRendering(self):
-        self.nbSamples = len(self.samples)
+        self.samples_count = len(self.samples)
         self.discovered = True
         self.start = 0
-        self.end = self.nbSamples
+        self.end = self.samples_count
         self._compute_geometry()
         if self.adapter:
             self.adapter.stop()
@@ -890,7 +883,7 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
                     for channel in p:
                         self.peaks.append([0] * int(self.nSamples))
 
-                pos = int(st / 10000000)
+                pos = int(st / SAMPLE_DURATION_NS)
                 if pos >= len(self.peaks[0]):
                     return
 
@@ -953,13 +946,16 @@ class AudioPreviewer(Gtk.Layout, PreviewGenerator, Zoomable, Loggable):
     def do_draw(self, context):
         if not self.discovered:
             return
+        if self.width < 0:
+            # Out of the view window.
+            return
 
         if self.surface:
             self.surface.finish()
-
-        self.surface = renderer.fill_surface(
-            self.samples[self.start:self.end], int(self.width),
-            int(self.get_parent().get_allocation().height))
+        samples = self.samples[self.start:self.end]
+        width = int(self.width)
+        height = int(self.get_parent().get_allocation().height)
+        self.surface = renderer.fill_surface(samples, width, height)
 
         context.set_operator(cairo.OPERATOR_OVER)
         context.set_source_surface(self.surface, 0, 0)
