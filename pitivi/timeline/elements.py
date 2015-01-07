@@ -59,8 +59,6 @@ class TimelineElement(Gtk.Box, timelineUtils.Zoomable, Loggable):
         self.bElement.selected = timelineUtils.Selected()
 
         self.props.vexpand = True
-        self.set_tooltip_markup("<span foreground='blue'>%s</span>" %
-                                self.bElement.get_name())
 
         self._previewer = self._getPreviewer()
         if self._previewer:
@@ -320,6 +318,9 @@ class UriClip(Clip):
     def __init__(self, layer, bClip):
         super(UriClip, self).__init__(layer, bClip)
 
+        self.set_tooltip_markup("<span foreground='blue'>%s</span>" %
+                                bClip.get_uri())
+
     def _setupWidget(self):
         self._vbox = Gtk.Box()
         self._vbox.set_orientation(Gtk.Orientation.HORIZONTAL)
@@ -386,6 +387,9 @@ class TransitionClip(Clip):
         self.bClip.connect("child-added", self._childAddedCb)
         self.connect("state-flags-changed", self._selectedChangedCb)
         self.connect("button-press-event", self._pressEventCb)
+
+        self.set_tooltip_markup("<span foreground='blue'>%s</span>" %
+                                str(bClip.props.vtype.value_nick))
 
     def _childAddedCb(self, clip, child):
         self.error("Adding %s selected" % child)
