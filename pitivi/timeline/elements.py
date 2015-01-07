@@ -292,6 +292,10 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         return False
 
     def _startChangedCb(self, unused_clip, unused_pspec):
+        if self.get_parent() is None:
+            # FIXME Check why that happens at all (looks like a GTK bug)
+            return
+
         self.layer.move(self, self.nsToPixel(self.bClip.props.start), 0)
 
     def _durationChangedCb(self, unused_clip, unused_pspec):
