@@ -425,8 +425,6 @@ class LayerControls(Gtk.Bin, Loggable):
         self._hbox.props.width_request = ui.CONTROL_WIDTH
         self.props.width_request = ui.CONTROL_WIDTH
 
-        self.props.height_request = ui.LAYER_HEIGHT
-
         sep = SpacedSeparator()
         self._hbox.pack_start(sep, False, False, 5)
 
@@ -493,6 +491,10 @@ class Layer(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
     __gtype_name__ = "PitiviLayer"
 
+    __gsignals__ = {
+        "remove-me": (GObject.SignalFlags.RUN_LAST, None, (),)
+    }
+
     def __init__(self, bLayer, timeline):
         super(Layer, self).__init__()
         Loggable.__init__(self)
@@ -512,14 +514,61 @@ class Layer(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._layout = LayerLayout(self.timeline)
         self.add(self._layout)
 
+        self.media_types = GES.TrackType(0)
         for clip in bLayer.get_clips():
             self._addClip(clip)
 
         self.before_sep = None
         self.after_sep = None
 
+    def _checkMediaTypes(self, bClip=None):
+        self.media_types = GES.TrackType(0)
+        bClips = self.bLayer.get_clips()
+
+        """
+        FIXME: That produces segfault in GES/GSequence
+        if bClip is not None:
+            bClips.remove(bClip)
+
+        if not bClips:
+            self.emit("remove-me")
+            self.error("REMOVE ME")
+            return
+        """
+
+        for bClip in bClips:
+            for child in bClip.get_children(False):
+                self.media_types |= child.get_track().props.track_type
+                if self.media_types == (GES.TrackType.AUDIO | GES.TrackType.VIDEO):
+                    break
+
+        if not (self.media_types & GES.TrackType.AUDIO) and not (self.media_types & GES.TrackType.VIDEO):
+            self.media_types = GES.TrackType.AUDIO | GES.TrackType.VIDEO
+
+        height = 0
+        if self.media_types & GES.TrackType.AUDIO:
+            height += ui.LAYER_HEIGHT / 2
+            self.bLayer.control_ui.audio_control.show()
+        else:
+            self.bLayer.control_ui.audio_control.hide()
+
+        if self.media_types & GES.TrackType.VIDEO:
+            self.bLayer.control_ui.video_control.show()
+            height += ui.LAYER_HEIGHT / 2
+        else:
+            self.bLayer.control_ui.video_control.hide()
+
+        self.props.height_request = height
+        self.bLayer.control_ui.props.height_request = height
+
     def move(self, child, x, y):
         self._layout.move(child, x, y)
+
+    def _childAddedCb(self, bClip, child):
+        self._checkMediaTypes()
+
+    def _childRemovedCb(self, bClip, child):
+        self._checkMediaTypes()
 
     def _clipAddedCb(self, layer, bClip):
         self._addClip(bClip)
@@ -537,6 +586,9 @@ class Layer(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
         self._layout.put(clip, self.nsToPixel(bClip.props.start), 0)
         self.show_all()
+        bClip.connect_after("child-added", self._childAddedCb)
+        bClip.connect_after("child-removed", self._childRemovedCb)
+        self._checkMediaTypes()
 
     def _clipRemovedCb(self, bLayer, bClip):
         self._removeClip(bClip)
@@ -544,14 +596,16 @@ class Layer(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
     def _removeClip(self, bClip):
         ui_type = elements.GES_TYPE_UI_TYPE.get(bClip.__gtype__, None)
         if ui_type is None:
-            self.fixme("Implement UI for type %s?" % bClip.__gtype__)
+            self.error("Implement UI for type %s?" % bClip.__gtype__)
             return
-
-        # self.error("%s Removed from %s" % (bClip.ui, self))
 
         self._layout.remove(bClip.ui)
         if self.timeline.draggingElement is None:
             bClip.ui = None
+
+        bClip.disconnect_by_func(self._childAddedCb)
+        bClip.disconnect_by_func(self._childRemovedCb)
+        self._checkMediaTypes(bClip)
 
     def _updatePosition(self):
         for bClip in self.bLayer.get_clips():

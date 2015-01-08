@@ -151,11 +151,15 @@ class Marquee(Gtk.Box, Loggable):
 
             for clip in layer.get_clips():
                 if self.contains(clip, x, w):
-                    res.append(clip)
+                    if clip.get_toplevel_parent():
+                        res.extend([c for c in clip.get_toplevel_parent().get_children(True)
+                                    if isinstance(c, GES.Clip)])
+                    else:
+                        res.append(clip)
 
         self.error("Result is %s" % res)
 
-        return res
+        return tuple(set(res))
 
     def contains(self, clip, x, w):
         if clip.ui is None:
@@ -187,12 +191,14 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._main_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(self._main_hbox)
 
-        self._layers_controls_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._main_hbox.pack_start(self._layers_controls_vbox, False, False, 0)
-
         self.layout = Gtk.Layout()
         self.hadj = self.layout.get_hadjustment()
         self.vadj = self.layout.get_vadjustment()
+
+        viewport = Gtk.Viewport(vadjustment=self.vadj)
+        self._layers_controls_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        viewport.add(self._layers_controls_vbox)
+        self._main_hbox.pack_start(viewport, False, False, 0)
 
         self._main_hbox.pack_start(self.layout, False, True, 0)
         self.get_style_context().add_class("Timeline")
@@ -214,7 +220,6 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
         self.current_group = None
         self.createSelectionGroup()
-        self.connect('event', self._eventCb)
 
         self.props.vexpand = False
         self._playhead = VerticalBar("PlayHead")
@@ -311,7 +316,7 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
     # GtkWidget virtual methods implementation
     def do_get_preferred_height(self):
-        return 160, max(1, len(self._layers)) * (ui.LAYER_HEIGHT + 20)
+        return ui.LAYER_HEIGHT, max(1, len(self._layers)) * (ui.LAYER_HEIGHT + 20)
 
     def do_draw(self, cr):
         self._layers_vbox.props.width_request = self.get_allocated_width()
@@ -374,30 +379,26 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         return x, y
 
     # Gtk events management
-    def _eventCb(self, widget, event):
+    def do_scroll_event(self, event):
+        self._scroll(event)
+        return False
+
+    def do_button_press_event(self, event):
         event_widget = Gtk.get_event_widget(event)
-        if event.type == Gdk.EventType.SCROLL:
-            self._scroll(event)
-        elif event.type == Gdk.EventType.BUTTON_PRESS:
-            self._pressed = True
+        self._pressed = True
 
-            res, button = event.get_button()
-            if res and button == 1:
-                self.draggingElement = self._getParentOfType(event_widget, Clip)
-                if self.draggingElement is not None:
-                    self._dragStartX = event.x
+        res, button = event.get_button()
+        if res and button == 1:
+            self.draggingElement = self._getParentOfType(event_widget, Clip)
+            if self.draggingElement is not None:
+                self._dragStartX = event.x
 
-                else:
-                    self._marquee.setStartPosition(event)
+            else:
+                self._marquee.setStartPosition(event)
 
-        elif event.type == Gdk.EventType.MOTION_NOTIFY:
-            if self.draggingElement:
-                self.dragUpdate(Gtk.get_event_widget(event), event.x, event.y)
-                self.got_dragged = True
-            elif self._marquee.start_x:
-                self._marquee.move(event)
+        return False
 
-        elif event.type == Gdk.EventType.BUTTON_RELEASE:
+    def do_button_release_event(self, event):
             if self.draggingElement:
                 self.dragEnd()
             else:
@@ -417,6 +418,15 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
             return False
 
+    def do_motion_notify_event(self, event):
+        if self.draggingElement:
+            self.dragUpdate(Gtk.get_event_widget(event), event.x, event.y)
+            self.got_dragged = True
+        elif self._marquee.start_x:
+            self._marquee.move(event)
+
+        return False
+
     def _selectUnderMarquee(self):
         if self._marquee.props.width_request > 0:
             clips = self._marquee.findSelected()
@@ -428,6 +438,8 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
                     self.current_group.add(clip.get_toplevel_parent())
 
                 self.selection.setSelection(clips, timelineUtils.SELECT)
+            else:
+                self.selection.setSelection([], timelineUtils.SELECT)
         else:
             only_transitions = not bool([selected for selected in self.selection.selected
                                          if not isinstance(selected, GES.TransitionClip)])
@@ -620,6 +632,7 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
     def _addLayer(self, bLayer):
         layer_widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
+        bLayer.control_ui = LayerControls(bLayer, self.app)
         bLayer.ui = Layer(bLayer, self)
 
         bLayer.ui.before_sep = SpacedSeparator()
@@ -632,21 +645,36 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         layer_widget.pack_start(bLayer.ui.after_sep, False, False, 5)
 
         self._layers_vbox.pack_start(layer_widget, True, True, 0)
-        bLayer.control_ui = LayerControls(bLayer, self.app)
         self._layers_controls_vbox.pack_start(bLayer.control_ui, False, False, 0)
+
+        bLayer.ui.connect("remove-me", self._removeLayerCb)
 
         self.show_all()
 
+    def _removeLayerCb(self, layer):
+        self.bTimeline.remove_layer(layer.bLayer)
+
     def _removeLayer(self, bLayer):
+        self.error("WANA REMOVE %s" % bLayer.props.priority)
         self._layers_vbox.remove(bLayer.ui.get_parent())
+        self.error("REMOVING")
         self._layers_controls_vbox.remove(bLayer.control_ui)
+
+        self._layers.remove(bLayer.ui)
         bLayer.ui = None
         bLayer.control_ui = None
 
+        self._layers.sort(key=lambda layer: layer.bLayer.props.priority)
+        i = 0
+        for layer in self._layers:
+            layer.bLayer.props.priority = i
+
+            self._layers_vbox.child_set_property(layer.get_parent(), "position", layer.bLayer.props.priority)
+            self._layers_controls_vbox.child_set_property(layer.bLayer.control_ui, "position", layer.bLayer.props.priority)
+
+            i += 1
+
     def _layerRemovedCb(self, unused_timeline, layer):
-        for lyr in self.bTimeline.get_layers():
-            if lyr.props.priority > layer.props.priority:
-                lyr.props.priority -= 1
         self._removeLayer(layer)
 
     # Interface Zoomable
@@ -663,9 +691,6 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._onSeparatorStartTime = None
 
     def getLayerAt(self, y, bLayer=None):
-        i = 0
-        y_height = (0, ui.LAYER_HEIGHT)
-
         if y < 20:
 
             try:
@@ -675,37 +700,34 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
             return bLayer, [bLayer.ui.before_sep]
 
-        while True:
-            if y >= y_height[0] and y < y_height[1]:
-                try:
-                    return self.bTimeline.get_layers()[i], []
-                except IndexError:
-                    return self.bTimeline.append_layer(), []
+        layers = self.bTimeline.get_layers()
+        rect = Gdk.Rectangle()
+        rect.x = 0
+        rect.y = y
+        rect.height = 1
+        rect.width = 1
+        for i in range(len(layers)):
+            layer = layers[i]
+            layer_alloc = layer.ui.get_allocation()
+            if Gdk.rectangle_intersect(rect, layer_alloc)[0] is True:
+                return layer, []
 
-            if y < (y_height[1] + 25):
+            separators = [layer.ui.after_sep]
+            sep_rectangle = Gdk.Rectangle()
+            sep_rectangle.x = 0
+            sep_rectangle.y = layer_alloc.y + layer_alloc.height
+            try:
+                sep_rectangle.height = layers[i + 1].ui.get_allocation().y - \
+                    layer_alloc.y - layer_alloc.height
+                separators.append(layers[i + 1].ui.before_sep)
+            except IndexError:
+                sep_rectangle.height += ui.LAYER_HEIGHT
 
-                if bLayer is None:
-                    if y < (y_height[1] + 25):
-                        bLayer = self.bTimeline.get_layers()[i]
-                        return bLayer, [bLayer.ui.before_sep]
+            if sep_rectangle.y <= rect.y <= sep_rectangle.y + sep_rectangle.height:
+                return layer, separators
 
-                if i == bLayer.props.priority:
-                    separators = [bLayer.ui.after_sep]
-                    try:
-                        separators.append(self.bTimeline.get_layers()[bLayer.props.priority + 1].ui.before_sep)
-                    except IndexError:
-                        pass
-                else:
-                    separators = [bLayer.ui.before_sep]
-                    try:
-                        separators.append(self.bTimeline.get_layers()[bLayer.props.priority - 1].ui.after_sep)
-                    except IndexError:
-                        pass
-
-                return bLayer, separators
-
-            y_height = (y_height[1] + 25, y_height[1] + 25 + ui.LAYER_HEIGHT)
-            i += 1
+        self.error("NOP!")
+        return layers[-1], layers[-1].ui.after_sep
 
     def _setHoverSeparators(self):
         for sep in self._onSeparators:
@@ -775,10 +797,10 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
                 if bLayer.get_priority() >= priority:
                     bLayer.props.priority += 1
                     self._layers_vbox.child_set_property(bLayer.ui.get_parent(), "position", bLayer.props.priority)
-                    self._layers_controls_vbox.child_set_property(bLayer.control_ui.get_parent(), "position", bLayer.props.priority)
+                    self._layers_controls_vbox.child_set_property(bLayer.control_ui, "position", bLayer.props.priority)
 
         self._layers_vbox.child_set_property(new_bLayer.ui.get_parent(), "position", new_bLayer.props.priority)
-        self._layers_vbox.child_set_property(new_bLayer.control_ui.get_parent(), "position", new_bLayer.props.priority)
+        self._layers_controls_vbox.child_set_property(new_bLayer.control_ui, "position", new_bLayer.props.priority)
 
         return new_bLayer
 
@@ -1224,6 +1246,8 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
 
             for clip in self.timeline.selection:
                 layer = clip.get_layer()
+                if isinstance(clip, GES.TransitionClip):
+                    continue
                 layer.remove_clip(clip)
 
             self._project.pipeline.commit_timeline()
@@ -1245,7 +1269,11 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
                     containers.add(toplevel)
 
             for container in containers:
+                was_clip = isinstance(container, GES.Clip)
                 clips = GES.Container.ungroup(container, False)
+                if not was_clip:
+                    continue
+
                 new_layers = {}
                 for clip in clips:
                     self.error("Clip is %s, children is %s" % (clip, clip.get_children(True)))

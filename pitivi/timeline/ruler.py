@@ -197,14 +197,14 @@ class ScaleRuler(Gtk.DrawingArea, Zoomable, Loggable):
         return False
 
     def do_button_press_event(self, event):
-        self.debug("button pressed at x:%d", event.x)
+        self.error("button pressed at x:%d", event.x)
         self.pressed = True
         position = self.pixelToNs(event.x + self.pixbuf_offset)
         self._seeker.seek(position, on_idle=True)
         return True
 
     def do_button_release_event(self, event):
-        self.debug("button released at x:%d", event.x)
+        self.error("button released at x:%d", event.x)
         self.grab_focus()  # Prevent other widgets from being confused
         self.pressed = False
         return False

@@ -106,7 +106,7 @@ class VideoUriSource(TimelineElement):
         return previewer
 
     def do_get_preferred_height(self):
-        return 90, ui.LAYER_HEIGHT
+        return ui.LAYER_HEIGHT / 2, ui.LAYER_HEIGHT
 
 
 class AudioUriSource(TimelineElement):
@@ -118,7 +118,7 @@ class AudioUriSource(TimelineElement):
         self.get_style_context().add_class("AudioUriSource")
 
     def do_get_preferred_height(self):
-        return 70, ui.LAYER_HEIGHT
+        return ui.LAYER_HEIGHT / 2, ui.LAYER_HEIGHT
 
     def _getPreviewer(self):
         previewer = previewers.AudioPreviewer(self.bElement)
@@ -299,9 +299,11 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self.layer.move(self, self.nsToPixel(self.bClip.props.start), 0)
 
     def _durationChangedCb(self, unused_clip, unused_pspec):
-        duration = self.nsToPixel(self.bClip.props.duration)
-        parent_height = self.get_parent().get_allocated_height()
-        self.set_size_request(duration, parent_height)
+        parent = self.get_parent()
+        if parent:
+            duration = self.nsToPixel(self.bClip.props.duration)
+            parent_height = parent.get_allocated_height()
+            self.set_size_request(duration, parent_height)
 
     def _layerChangedCb(self, bClip, unused_pspec):
         bLayer = bClip.props.layer
