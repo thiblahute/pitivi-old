@@ -151,7 +151,7 @@ class Marquee(Gtk.Box, Loggable):
 
             for clip in layer.get_clips():
                 if self.contains(clip, x, w):
-                    if clip.get_toplevel_parent():
+                    if isinstance(clip.get_toplevel_parent(), GES.Group):
                         res.extend([c for c in clip.get_toplevel_parent().get_children(True)
                                     if isinstance(c, GES.Clip)])
                     else:
@@ -297,9 +297,12 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
                             (self.layout.get_allocation().width / 2))
 
     def _positionCb(self, unused_pipeline, position):
+        if self.lastPosition == position:
+            return
+
         self.lastPosition = position
         self.scrollToPlayhead()
-        self.layout.move(self._playhead, self.nsToPixel(self.lastPosition), 0)
+        self.layout.move(self._playhead, max(0, self.nsToPixel(self.lastPosition) - 2), 0)
 
     # snapping indicator
     def _snapCb(self, unused_timeline, unused_obj1, unused_obj2, position):
@@ -324,7 +327,7 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._layers_controls_vbox.props.height_request = self.get_allocated_height()
 
         if self.bTimeline:
-            self.layout.set_size(self.nsToPixel(self.bTimeline.props.duration) + 500,
+            self.layout.set_size(self.nsToPixel(self.bTimeline.props.duration) + 100,
                                  len(self.bTimeline.get_layers()) * 200)
 
         Gtk.EventBox.do_draw(self, cr)
@@ -380,7 +383,25 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
     # Gtk events management
     def do_scroll_event(self, event):
-        self._scroll(event)
+        res, delta_x, delta_y = event.get_scroll_deltas()
+        if not res:
+            return False
+
+        event_widget = Gtk.get_event_widget(event)
+        x, y = event_widget.translate_coordinates(self, event.x, event.y)
+        if event.get_state() & Gdk.ModifierType.SHIFT_MASK:
+            if delta_y > 0:
+                self._container.scroll_down()
+            elif delta_y < 0:
+                self._container.scroll_up()
+        elif event.get_state() & Gdk.ModifierType.CONTROL_MASK:
+            if delta_y > 0:
+                timelineUtils.Zoomable.zoomOut()
+                self.queue_draw()
+            elif delta_y < 0:
+                rescroll = True
+                timelineUtils.Zoomable.zoomIn()
+                self.queue_draw()
         return False
 
     def do_button_press_event(self, event):
@@ -447,29 +468,6 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
                 self.selection.setSelection([], timelineUtils.SELECT)
 
         self._marquee.hide()
-
-    def _scroll(self, event):
-        unused_res, delta_x, delta_y = event.get_scroll_deltas()
-        if event.get_state()[1] & Gdk.ModifierType.SHIFT_MASK:
-            if delta_y > 0:
-                # self.scroll_down()
-                pass
-            elif delta_y < 0:
-                # self.scroll_up()
-                pass
-        elif event.get_state()[1] & Gdk.ModifierType.CONTROL_MASK:
-            if delta_y > 0:
-                self.updatePosition()
-
-                timelineUtils.Zoomable.zoomOut()
-                # self.error("ZOOM IN")
-                self.queue_draw()
-            elif delta_y < 0:
-                rescroll = True
-                self.updatePosition()
-                timelineUtils.Zoomable.zoomIn()
-                # self.error("ZOOM OUT")
-                self.queue_draw()
 
     def updatePosition(self):
         for layer in self._layers:
@@ -679,6 +677,8 @@ class Timeline(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
 
     # Interface Zoomable
     def zoomChanged(self):
+        self.updatePosition()
+        self.layout.move(self._playhead, self.nsToPixel(self.lastPosition), 0)
         self.queue_draw()
 
     # Edition handling
