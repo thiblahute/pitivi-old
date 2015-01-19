@@ -110,7 +110,6 @@ class ScaleRuler(Gtk.DrawingArea, Zoomable, Loggable):
         self.connect('draw', self.drawCb)
         self.connect('configure-event', self.configureEventCb)
         self.callback_id = None
-        self.callback_id_scroll = None
         self.set_size_request(0, 25)
 
         style = self.get_style_context()
@@ -135,22 +134,12 @@ class ScaleRuler(Gtk.DrawingArea, Zoomable, Loggable):
 
     def _hadjValueChangedCb(self, unused_arg):
         self.pixbuf_offset = self.hadj.get_value()
-        if self.callback_id_scroll is not None:
-            GLib.source_remove(self.callback_id_scroll)
-        self.callback_id_scroll = GLib.timeout_add(100, self._maybeUpdate)
+        self.queue_draw()
 
 # Zoomable interface override
 
-    def _maybeUpdate(self):
-        self.queue_draw()
-        self.callback_id = None
-        self.callback_id_scroll = None
-        return False
-
     def zoomChanged(self):
-        if self.callback_id is not None:
-            GLib.source_remove(self.callback_id)
-        self.callback_id = GLib.timeout_add(100, self._maybeUpdate)
+        self.queue_draw()
 
 # Timeline position changed method
 
