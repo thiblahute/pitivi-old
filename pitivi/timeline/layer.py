@@ -473,6 +473,7 @@ class LayerLayout(Gtk.Layout, Loggable):
 
     def do_draw(self, cr):
         if self._changed:
+            self._children.sort(key=lambda clip: clip.z_order)
             for child in self._children:
 
                 if isinstance(child, elements.TransitionClip):

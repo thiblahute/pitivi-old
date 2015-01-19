@@ -191,6 +191,10 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self._videoSource = None
 
         self._setupWidget()
+
+        for child in self.bClip.get_children(False):
+            self._childAdded(self.bClip, child)
+
         self._savePositionState()
         self._connectWidgetSignals()
 
@@ -311,11 +315,26 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
             self.layer = bLayer.ui
         # self.error("SETTING LAYER! %s (prio is: %s)" % (bLayer, bLayer.props.priority))
 
+    def _childAdded(self, clip, child):
+        pass
+
+    def _childAddedCb(self, clip, child):
+        self._childAdded(clip, child)
+
+    def _childRemoved(self, clip, child):
+        pass
+
+    def _childRemovedCb(self, clip, child):
+        self._childRemoved(clip, child)
+
     def _connectGES(self):
         self.bClip.connect("notify::start", self._startChangedCb)
         self.bClip.connect("notify::inpoint", self._startChangedCb)
         self.bClip.connect("notify::duration", self._durationChangedCb)
         self.bClip.connect("notify::layer", self._layerChangedCb)
+
+        self.bClip.connect("child-added", self._childAddedCb)
+        self.bClip.connect("child-removed", self._childRemovedCb)
 
 
 class UriClip(Clip):
@@ -339,10 +358,7 @@ class UriClip(Clip):
         self._vbox.pack_start(self._paned, True, True, 0)
 
         self.rightHandle = TrimHandle(self, GES.Edge.EDGE_END)
-        self._vbox.pack_end(self.rightHandle, False, False, 0)
-
-        for child in self.bClip.get_children(False):
-            self._childAdded(self.bClip, child)
+        self._vbox.pack_end(self.rightHandle, False, False, 0)\
 
         self.get_style_context().add_class("Clip")
 
@@ -361,21 +377,11 @@ class UriClip(Clip):
         else:
             child.ui = None
 
-    def _childAddedCb(self, clip, child):
-        self._childAdded(clip, child)
-
     def _childRemoved(self, clip, child):
+        self.error("CHILD REMOVED")
         if child.ui is not None:
             self._paned.remove(child.ui)
             child.ui = None
-
-    def _connectGES(self):
-        super(UriClip, self)._connectGES()
-        self.bClip.connect("child-added", self._childAddedCb)
-        self.bClip.connect("child-removed", self._childRemovedCb)
-
-    def _childRemovedCb(self, clip, child):
-        self._childRemoved(clip, child)
 
 
 class TransitionClip(Clip):
@@ -391,30 +397,38 @@ class TransitionClip(Clip):
         for child in bClip.get_children(True):
             child.selected = timelineUtils.Selected()
         self.bClip.connect("child-added", self._childAddedCb)
+        self.selected = False
         self.connect("state-flags-changed", self._selectedChangedCb)
         self.connect("button-press-event", self._pressEventCb)
 
         self.set_tooltip_markup("<span foreground='blue'>%s</span>" %
                                 str(bClip.props.vtype.value_nick))
 
-    def _childAddedCb(self, clip, child):
+    def _childAdded(self, clip, child):
         self.error("Adding %s selected" % child)
         child.selected = timelineUtils.Selected()
+
+        if isinstance(child, GES.VideoTransition):
+            self.z_order += 1
 
     def do_draw(self, cr):
         Clip.do_draw(self, cr)
 
     def _selectedChangedCb(self, unused_widget, flags):
+        if not [c for c in self.bClip.get_children(True) if isinstance(c, GES.VideoTransition)]:
+            return
+
         if flags & Gtk.StateFlags.SELECTED:
             self.timeline._container.app.gui.trans_list.activate(self.bClip)
-        else:
+            self.selected = True
+        elif self.selected:
+            self.selected = False
             self.timeline._container.app.gui.trans_list.deactivate()
 
     def _pressEventCb(self, unused_action, unused_widget):
-        self.error("HERE")
         selection = {self.bClip}
         self.timeline.selection.setSelection(selection, timelineUtils.SELECT)
-        return False
+        return True
 
 GES_TYPE_UI_TYPE = {
     GES.UriClip.__gtype__: UriClip,
